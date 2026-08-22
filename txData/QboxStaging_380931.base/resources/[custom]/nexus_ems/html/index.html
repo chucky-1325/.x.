@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS Clinica</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main id="tablet" class="tablet" aria-hidden="true">
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand-mark">N</span>
+                <div>
+                    <p>NEXUS SERVICIOS SANITARIOS</p>
+                    <h1>Evaluacion clinica</h1>
+                </div>
+            </div>
+            <div class="top-actions">
+                <span id="clock" class="clock">--:--</span>
+                <button id="close" class="icon-button" type="button" aria-label="Cerrar" title="Cerrar">X</button>
+            </div>
+        </header>
+
+        <section class="patient-strip">
+            <div>
+                <span class="eyebrow">PACIENTE</span>
+                <strong id="patient-name">Sin identificar</strong>
+                <small id="patient-id">ID --</small>
+            </div>
+            <div id="triage" class="triage stable">
+                <span id="triage-dot"></span>
+                <div>
+                    <small>PRIORIDAD</small>
+                    <strong id="triage-label">ESTABLE</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="workspace">
+            <div class="monitor">
+                <div class="monitor-heading">
+                    <div>
+                        <span class="eyebrow">MONITORIZACION</span>
+                        <h2>Constantes vitales</h2>
+                    </div>
+                    <span id="status-chip" class="status-chip">CONSCIENTE</span>
+                </div>
+
+                <div class="vitals-grid">
+                    <article class="vital pulse">
+                        <span>FC</span>
+                        <strong id="pulse">--</strong>
+                        <small>lpm</small>
+                    </article>
+                    <article class="vital respiration">
+                        <span>FR</span>
+                        <strong id="respiration">--</strong>
+                        <small>rpm</small>
+                    </article>
+                    <article class="vital health">
+                        <span>ESTADO</span>
+                        <strong id="health">--</strong>
+                        <small>/ 200</small>
+                    </article>
+                </div>
+
+                <div class="clinical-bars">
+                    <div class="clinical-row">
+                        <div><span>Sangrado</span><strong id="bleeding-text">0 / 4</strong></div>
+                        <div class="track"><i id="bleeding-bar"></i></div>
+                    </div>
+                    <div class="clinical-row">
+                        <div><span>Dolor</span><strong id="pain-text">0 / 4</strong></div>
+                        <div class="track"><i id="pain-bar"></i></div>
+                    </div>
+                </div>
+
+                <div class="flags">
+                    <span id="flag-stable" class="flag">NO ESTABILIZADO</span>
+                    <span id="flag-transport" class="flag">TRASLADO PENDIENTE</span>
+                </div>
+            </div>
+
+            <aside class="treatments">
+                <div class="section-heading">
+                    <span class="eyebrow">PROTOCOLO</span>
+                    <h2>Intervenciones</h2>
+                </div>
+                <div id="actions" class="action-list"></div>
+            </aside>
+        </section>
+
+        <footer>
+            <span>Registro clinico activo</span>
+            <button id="hospital" type="button">Marcar hospital</button>
+        </footer>
+    </main>
+    <script src="app.js"></script>
+</body>
+</html>
+

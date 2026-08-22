@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS Crafting</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main id="app" class="crafting-shell" aria-hidden="true">
+        <section class="workbench">
+            <aside class="recipe-list">
+                <div class="brand">
+                    <span>WORKBENCH</span>
+                    <strong>CRAFTING</strong>
+                </div>
+                <div class="tab">Recetas disponibles</div>
+                <div id="recipes" class="recipes"></div>
+            </aside>
+
+            <section class="recipe-detail">
+                <header class="detail-header">
+                    <div>
+                        <p id="category" class="eyebrow">Mesa</p>
+                        <h1 id="stationName">Crafting</h1>
+                    </div>
+                    <div class="status">
+                        <span id="level">Nivel 1</span>
+                        <button id="refresh" type="button" title="Actualizar">R</button>
+                        <button id="close" type="button" title="Cerrar">X</button>
+                    </div>
+                </header>
+
+                <div class="progress">
+                    <div class="progress-info">
+                        <span id="xpLabel">0 / 1000 XP</span>
+                        <span id="repLabel">Rep 0</span>
+                    </div>
+                    <div class="progress-track"><span id="xpBar"></span></div>
+                </div>
+
+                <div id="selected" class="selected"></div>
+            </section>
+
+            <aside class="blueprint">
+                <div class="paper">
+                    <div id="blueprintIcon" class="blueprint-icon">N</div>
+                    <div id="blueprintItem" class="blueprint-item">Selecciona una receta</div>
+                </div>
+                <strong>CRAFTING<br>WORKBENCH</strong>
+            </aside>
+
+            <footer class="footer-hint">
+                <span>ESC</span>
+                <p>Salir</p>
+            </footer>
+
+            <div id="craftOverlay" class="craft-overlay" aria-hidden="true">
+                <div class="craft-pulse">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <strong id="craftProgressTitle">Fabricando</strong>
+                <p id="craftProgressText">Preparando mesa...</p>
+                <div class="craft-progress-track"><span id="craftProgressBar"></span></div>
+            </div>
+        </section>
+    </main>
+    <script>
+        (function () {
+            var resource = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'nexus_crafting';
+            var app = document.getElementById('app');
+            var recipes = document.getElementById('recipes');
+            var selected = document.getElementById('selected');
+            var stationName = document.getElementById('stationName');
+            var category = document.getElementById('category');
+            var level = document.getElementById('level');
+            var xpLabel = document.getElementById('xpLabel');
+            var repLabel = document.getElementById('repLabel');
+            var xpBar = document.getElementById('xpBar');
+            var blueprintIcon = document.getElementById('blueprintIcon');
+            var blueprintItem = document.getElementById('blueprintItem');
+
+            function post(name, data) {
+                try {
+                    var request = new XMLHttpRequest();
+                    request.open('POST', 'https://' + resource + '/' + name, true);
+                    request.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
+                    request.send(JSON.stringify(data || {}));
+                } catch (error) {}
+            }
+
+            function showInline(payload) {
+                var data = payload && payload.data ? payload.data : {};
+                app.classList.add('active');
+                app.setAttribute('aria-hidden', 'false');
+                stationName.textContent = data.label || 'NUI INLINE TEST';
+                category.textContent = payload.action === 'open' ? 'Fallback inline' : 'Diagnostico';
+                level.textContent = 'OK';
+                xpLabel.textContent = 'HTML activo';
+                repLabel.textContent = 'Inline';
+                xpBar.style.width = '100%';
+                recipes.innerHTML = '<button class="recipe-row active" type="button"><span class="recipe-icon">N</span><span class="recipe-name"><strong>Inline activo</strong><span>index.html recibio mensaje</span></span><span class="recipe-level">OK</span></button>';
+                selected.innerHTML = '<h2>NUI HTML cargada</h2><p>El HTML recibio SendNUIMessage. Si no ves recetas, app.js no esta cargando.</p>';
+                blueprintIcon.textContent = 'OK';
+                blueprintItem.textContent = 'HTML responde';
+                post('opened', { source: 'inline' });
+            }
+
+            window.addEventListener('message', function (event) {
+                var payload = event && event.data ? event.data : {};
+                if (payload.action === 'diagnostic' || (payload.action === 'open' && !window.__nexusCraftingAppLoaded)) showInline(payload);
+                if (payload.action === 'close') {
+                    app.classList.remove('active');
+                    app.setAttribute('aria-hidden', 'true');
+                }
+            });
+
+            window.__nexusCraftingPost = post;
+            post('ready', { source: 'inline' });
+        }());
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS Tablet</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <main id="tablet" class="tablet hidden">
+        <section class="frame">
+            <header class="topbar">
+                <div>
+                    <span class="eyebrow">RED CLANDESTINA</span>
+                    <h1 id="gangName">NEXUS</h1>
+                </div>
+                <div class="top-actions">
+                    <button data-action="refresh">R</button>
+                    <button id="closeBtn">X</button>
+                </div>
+            </header>
+
+            <section class="grid stats">
+                <article>
+                    <span>Banda</span>
+                    <strong id="gangTag">NONE</strong>
+                    <small id="gangRank">Sin rango</small>
+                </article>
+                <article>
+                    <span>Criminal</span>
+                    <strong id="criminalLevel">N1</strong>
+                    <small id="criminalRep">Rep 0</small>
+                </article>
+                <article>
+                    <span>Crafting</span>
+                    <strong id="craftLevel">N1</strong>
+                    <small id="craftRep">Rep 0</small>
+                </article>
+                <article>
+                    <span>Airdrop</span>
+                    <strong id="airdropState">OFF</strong>
+                    <small id="airdropZone">Sin senal</small>
+                </article>
+            </section>
+
+            <section class="content">
+                <nav class="ops">
+                    <div class="signal">
+                        <span>RIESGO</span>
+                        <strong id="riskScore">0</strong>
+                        <small id="riskLabel">bajo</small>
+                    </div>
+                    <button data-action="operations">Operaciones</button>
+                    <button data-action="members">Gestion miembros</button>
+                    <button data-action="labs">Laboratorios</button>
+                    <button data-action="laundering">Lavado</button>
+                    <button data-action="contracts">Contratos</button>
+                    <button data-action="blackmarket">Mercado negro</button>
+                    <button data-action="assets">Safehouse</button>
+                    <button data-action="territories">Territorios</button>
+                    <button data-action="crafting">Crafting ilegal</button>
+                </nav>
+
+                <section class="panels">
+                    <article class="panel tactical">
+                        <h2>Mapa operativo</h2>
+                        <div id="tacticalMap" class="tactical-map"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Territorios</h2>
+                        <div id="territories" class="list"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Operaciones</h2>
+                        <div id="operations" class="list"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Miembros</h2>
+                        <div id="members" class="list"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Laboratorios</h2>
+                        <div id="labs" class="list"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Mercado</h2>
+                        <div id="markets" class="list"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Lavado</h2>
+                        <div id="laundering" class="list compact"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Contratos / Assets</h2>
+                        <div id="contracts" class="list"></div>
+                        <div id="assets" class="list compact"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Bitacora</h2>
+                        <div id="operationLogs" class="list compact"></div>
+                    </article>
+                    <article class="panel">
+                        <h2>Auditoria</h2>
+                        <div id="audit" class="list compact"></div>
+                    </article>
+                </section>
+            </section>
+
+            <footer>
+                <span>ESC para cerrar</span>
+                <span id="status">canal seguro activo</span>
+            </footer>
+        </section>
+    </main>
+    <script src="./app.js"></script>
+</body>
+</html>

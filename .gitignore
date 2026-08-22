@@ -1,0 +1,46 @@
+# NEXUS staging source-only .gitignore
+# Scope: only the nexus_* resource source under the staging txData profile.
+# Everything else (docs, root scripts, runtime data, secrets) stays out.
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+
+# --- Root-level non-source items: out of scope for "solo codigo fuente" ---
+/*.md
+!/README.md
+/*.bat
+/.codex/
+/docs/
+/backups/
+/logs/
+/server/
+/txData_f1a_staging/
+
+# --- txData: runtime/profile data, secrets, DB, caches ---
+# Re-include only the staging base's [custom] nexus_* resource sources.
+/txData/**
+!/txData/QboxStaging_380931.base/
+/txData/QboxStaging_380931.base/*
+!/txData/QboxStaging_380931.base/resources/
+/txData/QboxStaging_380931.base/resources/*
+!/txData/QboxStaging_380931.base/resources/\[custom\]/
+/txData/QboxStaging_380931.base/resources/\[custom\]/*
+!/txData/QboxStaging_380931.base/resources/\[custom\]/nexus_*/
+!/txData/QboxStaging_380931.base/resources/\[custom\]/nexus_*/**
+
+# --- Belt-and-suspenders: never allow these even if scope changes later ---
+*.sql
+*.key
+*.pem
+*.crt
+server.cfg
+server.cfg.bkp
+server-*.cfg
+*.env
+.env*
+
+# --- Exception: real NEXUS schema/migration SQL source lives here.
+# Any other .sql anywhere else (dumps, backups, ad-hoc exports) stays
+# ignored by the blanket "*.sql" rule above. ---
+!/txData/QboxStaging_380931.base/resources/\[custom\]/nexus_*/sql/**/*.sql
