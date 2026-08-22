@@ -20,14 +20,6 @@ client_scripts {
     'client/main.lua',
 }
 
-ui_page 'html/index.html'
-
-files {
-    'html/index.html',
-    'html/app.js',
-    'html/style.css',
-}
-
 dependencies {
     'ox_lib',
     'qbx_core',
