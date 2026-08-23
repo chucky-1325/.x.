@@ -230,8 +230,12 @@ RegisterNetEvent('nexus_laundering:server:launder', function(locationId, amount)
     })
 
     if GetResourceState('nexus_progression') == 'started' then
-        exports.nexus_progression:addProgression(citizenid, 'criminal', math.floor(dirtyAmount / 100), 1)
-        TriggerClientEvent('nexus_progression:client:tick', src, 'criminal', math.floor(dirtyAmount / 100), 1)
+        local progressionOk = exports.nexus_progression:addProgression(citizenid, 'criminal', math.floor(dirtyAmount / 100), 1)
+        if progressionOk then
+            TriggerClientEvent('nexus_progression:client:tick', src, 'criminal', math.floor(dirtyAmount / 100), 1)
+        else
+            print(('[nexus_laundering] WARNING: addProgression rechazado para citizenid=%s (criminal, xp=%s, rep=1)'):format(citizenid, math.floor(dirtyAmount / 100)))
+        end
     end
 
     notify(src, ('Lavado completado: $%s limpio | Comision $%s | Riesgo %s%%'):format(cleanAmount, commission, risk), 'success')

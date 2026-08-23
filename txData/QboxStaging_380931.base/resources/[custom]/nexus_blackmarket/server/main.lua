@@ -366,8 +366,12 @@ RegisterNetEvent('nexus_blackmarket:server:buy', function(locationId, catalogId)
     })
 
     if GetResourceState('nexus_progression') == 'started' then
-        exports.nexus_progression:addProgression(citizenid, 'criminal', 35, 1)
-        TriggerClientEvent('nexus_progression:client:tick', src, 'criminal', 35, 1)
+        local progressionOk = exports.nexus_progression:addProgression(citizenid, 'criminal', 35, 1)
+        if progressionOk then
+            TriggerClientEvent('nexus_progression:client:tick', src, 'criminal', 35, 1)
+        else
+            print(('[nexus_blackmarket] WARNING: addProgression rechazado para citizenid=%s (criminal, xp=35, rep=1)'):format(citizenid))
+        end
     end
 
     local alertText = policeAlert and ' Posible alerta policial.' or ''

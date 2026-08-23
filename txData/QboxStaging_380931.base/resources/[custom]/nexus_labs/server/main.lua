@@ -544,8 +544,12 @@ RegisterNetEvent('nexus_labs:server:produce', function(labId)
         local xp = recipe.xp or 0
         local reputation = recipe.reputation or 0
         if player and GetResourceState('nexus_progression') == 'started' then
-            exports.nexus_progression:addProgression(player.PlayerData.citizenid, 'criminal', xp, reputation)
-            TriggerClientEvent('nexus_progression:client:tick', src, 'criminal', xp, reputation)
+            local progressionOk = exports.nexus_progression:addProgression(player.PlayerData.citizenid, 'criminal', xp, reputation)
+            if progressionOk then
+                TriggerClientEvent('nexus_progression:client:tick', src, 'criminal', xp, reputation)
+            else
+                print(('[nexus_labs] WARNING: addProgression rechazado para citizenid=%s (criminal, xp=%s, rep=%s)'):format(player.PlayerData.citizenid, xp, reputation))
+            end
         end
 
         if GetResourceState('nexus_territories') == 'started' then

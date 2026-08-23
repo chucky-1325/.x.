@@ -373,8 +373,12 @@ local function rewardPlayer(source, player, reward)
     end
 
     if GetResourceState('nexus_progression') == 'started' and (xp > 0 or reputation > 0) then
-        exports.nexus_progression:addProgression(player.PlayerData.citizenid, 'criminal', xp, reputation)
-        TriggerClientEvent('nexus_progression:client:tick', source, 'criminal', xp, reputation)
+        local progressionOk = exports.nexus_progression:addProgression(player.PlayerData.citizenid, 'criminal', xp, reputation)
+        if progressionOk then
+            TriggerClientEvent('nexus_progression:client:tick', source, 'criminal', xp, reputation)
+        else
+            print(('[nexus_operations] WARNING: addProgression rechazado para citizenid=%s (criminal, xp=%s, rep=%s)'):format(player.PlayerData.citizenid, xp, reputation))
+        end
     end
 
     return cash, xp, reputation
