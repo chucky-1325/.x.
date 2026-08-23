@@ -647,6 +647,45 @@ exports('getDashboardContracts', function(source)
     }
 end)
 
+local function isCraftAdminAllowed(source)
+    return source == 0 or IsPlayerAceAllowed(source, NexusContractsConfig.quarantineAdminAce)
+end
+
+lib.callback.register('nexus_contracts:server:listCraftQuarantines', function(source)
+    if not craftingSchemaReady then return nil, 'schema_not_ready' end
+    if not isCraftAdminAllowed(source) then return nil, 'forbidden' end
+
+    local rows = NexusContractsListCraftQuarantines()
+    local list = {}
+    for i = 1, #rows do
+        local row = rows[i]
+        list[#list + 1] = {
+            reservationId = row.reservation_id,
+            citizenid = row.citizenid,
+            lotId = row.lot_id,
+            incidentReason = row.incident_reason,
+            finalizedAt = row.finalized_at,
+        }
+    end
+    return list
+end)
+
+lib.callback.register('nexus_contracts:server:recoverCraftQuarantine', function(source, reservationId, route)
+    if not craftingSchemaReady then return false, 'schema_not_ready' end
+    if not isCraftAdminAllowed(source) then return false, 'forbidden' end
+    if type(reservationId) ~= 'string' or reservationId == '' then return false, 'invalid_reservation' end
+    if route ~= 'reintegrar' and route ~= 'cerrar' then return false, 'invalid_route' end
+
+    local result = NexusContractsRecoverCraftQuarantine(reservationId, route)
+    if not result then return false, 'database_error' end
+
+    local ok = result.result == 'COMMIT'
+    print(('[nexus_contracts] quarantine recovery %s -> %s (stock=%s lot=%s event=%s) by source %s'):format(
+        reservationId, tostring(result.result), tostring(result.stock_rc), tostring(result.lot_rc), tostring(result.event_rc), tostring(source)
+    ))
+    return ok, result.result
+end)
+
 exports('getDutyboardSnapshot', function(source)
     source = tonumber(source)
     if not source or source <= 0 then return nil end

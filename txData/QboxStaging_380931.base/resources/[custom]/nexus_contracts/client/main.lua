@@ -199,6 +199,101 @@ end
 exports('openContracts', openContracts)
 RegisterCommand(NexusContractsConfig.command, openContracts, false)
 
+local openQuarantinePanel
+
+local function requestQuarantineList()
+    local list, err = lib.callback.await('nexus_contracts:server:listCraftQuarantines', false)
+    if err then
+        notify('No tienes acceso a esta herramienta.', 'error')
+        return nil
+    end
+    return list or {}
+end
+
+local function confirmReservationId(expectedId)
+    local input = lib.inputDialog('Confirmar recuperacion', {
+        {
+            type = 'input',
+            label = 'Escribe el reservation_id exacto para confirmar',
+            required = true,
+        },
+    })
+    if not input or not input[1] then return false end
+    return tostring(input[1]) == expectedId
+end
+
+local function runQuarantineRecovery(reservationId, route, routeLabel)
+    if not confirmReservationId(reservationId) then
+        notify('Confirmacion incorrecta. Cancelado.', 'error')
+        return
+    end
+
+    local ok, result = lib.callback.await('nexus_contracts:server:recoverCraftQuarantine', false, reservationId, route)
+    if ok then
+        notify(('%s completado para %s.'):format(routeLabel, reservationId), 'success')
+    else
+        notify(('%s fallo: %s'):format(routeLabel, tostring(result)), 'error')
+    end
+    openQuarantinePanel()
+end
+
+openQuarantinePanel = function()
+    local list = requestQuarantineList()
+    if not list then return end
+
+    if #list == 0 then
+        notify('No hay cuarentenas de crafting pendientes.', 'inform')
+        return
+    end
+
+    local options = {}
+    for i = 1, #list do
+        local item = list[i]
+        options[#options + 1] = {
+            title = item.reservationId,
+            description = ('Citizenid: %s | Motivo: %s'):format(item.citizenid, item.incidentReason or '-'),
+            icon = 'fa-solid fa-triangle-exclamation',
+            arrow = true,
+            onSelect = function()
+                lib.registerContext({
+                    id = 'nexus_craft_quarantine_detail',
+                    title = item.reservationId,
+                    menu = 'nexus_craft_quarantine_list',
+                    options = {
+                        {
+                            title = 'Reintegrar materiales',
+                            description = 'Devuelve el stock al pool disponible.',
+                            icon = 'fa-solid fa-rotate-left',
+                            onSelect = function()
+                                runQuarantineRecovery(item.reservationId, 'reintegrar', 'Reintegrar')
+                            end,
+                        },
+                        {
+                            title = 'Cerrar / descartar',
+                            description = 'Descarta el stock, libera el slot del lote.',
+                            icon = 'fa-solid fa-ban',
+                            onSelect = function()
+                                runQuarantineRecovery(item.reservationId, 'cerrar', 'Cerrar')
+                            end,
+                        },
+                    },
+                })
+                lib.showContext('nexus_craft_quarantine_detail')
+            end,
+        }
+    end
+
+    lib.registerContext({
+        id = 'nexus_craft_quarantine_list',
+        title = 'Cuarentenas de Crafting',
+        options = options,
+    })
+    lib.showContext('nexus_craft_quarantine_list')
+end
+
+exports('openQuarantinePanel', openQuarantinePanel)
+RegisterCommand(NexusContractsConfig.quarantineAdminCommand, openQuarantinePanel, false)
+
 RegisterNetEvent('nexus_contracts:client:setActive', function(payload, contract)
     setActive(payload, contract)
 end)

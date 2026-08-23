@@ -343,6 +343,24 @@ function NexusContractsMarkAmbiguous(lotId, citizenid, reason)
     return true
 end
 
+function NexusContractsListCraftQuarantines()
+    return databaseCall('list_craft_quarantines', function()
+        return MySQL.query.await([[
+            SELECT reservation_id, citizenid, lot_id, incident_reason, finalized_at
+            FROM nexus_mechanic_craft_reservations
+            WHERE state = 'ambiguous'
+            ORDER BY finalized_at ASC
+        ]])
+    end) or {}
+end
+
+function NexusContractsRecoverCraftQuarantine(reservationId, route)
+    return databaseCall('recover_craft_quarantine', function()
+        local rows = MySQL.query.await('CALL sp_recover_craft_quarantine(?, ?)', { reservationId, route })
+        return rows and rows[1] or nil
+    end)
+end
+
 function NexusContractsGetExpiredLots(now)
     return databaseCall('get_expired_lots', function()
         return MySQL.query.await([[
