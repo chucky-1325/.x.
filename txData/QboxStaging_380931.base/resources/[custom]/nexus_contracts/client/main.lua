@@ -222,6 +222,13 @@ local function confirmReservationId(expectedId)
     return tostring(input[1]) == expectedId
 end
 
+local RECOVERY_RESULT_LABELS = {
+    UNSAFE_ROUTE_FOR_REASON = 'No se puede Reintegrar: el item fabricado pudo haberse entregado ya al inventario del jugador. Usa Cerrar en su lugar.',
+    RESERVATION_NOT_FOUND = 'La reserva ya no esta en cuarentena (puede que ya se haya resuelto).',
+    INVALID_ROUTE = 'Ruta de recuperacion invalida.',
+    ROLLBACK = 'La recuperacion no pudo confirmarse (los datos cambiaron). Vuelve a intentarlo.',
+}
+
 local function runQuarantineRecovery(reservationId, route, routeLabel)
     if not confirmReservationId(reservationId) then
         notify('Confirmacion incorrecta. Cancelado.', 'error')
@@ -232,7 +239,8 @@ local function runQuarantineRecovery(reservationId, route, routeLabel)
     if ok then
         notify(('%s completado para %s.'):format(routeLabel, reservationId), 'success')
     else
-        notify(('%s fallo: %s'):format(routeLabel, tostring(result)), 'error')
+        local label = RECOVERY_RESULT_LABELS[result] or tostring(result)
+        notify(('%s fallo: %s'):format(routeLabel, label), 'error')
     end
     openQuarantinePanel()
 end

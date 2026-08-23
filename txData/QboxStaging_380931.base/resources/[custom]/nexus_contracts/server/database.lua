@@ -397,7 +397,7 @@ end
 function NexusContractsRecoverCraftQuarantine(reservationId, route)
     return databaseCall('recover_craft_quarantine', function()
         local rows = MySQL.query.await('CALL sp_recover_craft_quarantine(?, ?)', { reservationId, route })
-        return rows and rows[1] or nil
+        return rows and rows[1] and rows[1][1] or nil
     end)
 end
 
