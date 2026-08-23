@@ -686,6 +686,46 @@ lib.callback.register('nexus_contracts:server:recoverCraftQuarantine', function(
     return ok, result.result
 end)
 
+local SAFE_LOT_INCIDENT_REASONS = {
+    created_event_not_persisted = true,
+    pickup_event_not_persisted = true,
+    inventory_removed_stock_commit_failed = true,
+}
+
+lib.callback.register('nexus_contracts:server:listLotIncidents', function(source)
+    if not schemaReady then return nil, 'schema_not_ready' end
+    if not isCraftAdminAllowed(source) then return nil, 'forbidden' end
+
+    local rows = NexusContractsListLotIncidents()
+    local list = {}
+    for i = 1, #rows do
+        local row = rows[i]
+        list[#list + 1] = {
+            lotId = row.lot_id,
+            citizenid = row.citizenid,
+            incidentReason = row.incident_reason,
+            finalizedAt = row.finalized_at,
+            safe = SAFE_LOT_INCIDENT_REASONS[row.incident_reason] == true,
+        }
+    end
+    return list
+end)
+
+lib.callback.register('nexus_contracts:server:recoverLotIncident', function(source, lotId)
+    if not schemaReady then return false, 'schema_not_ready' end
+    if not isCraftAdminAllowed(source) then return false, 'forbidden' end
+    if type(lotId) ~= 'string' or lotId == '' then return false, 'invalid_lot' end
+
+    local result = NexusContractsRecoverLotIncident(lotId, supplyConfig().stockKey)
+    if not result then return false, 'database_error' end
+
+    local ok = result.result == 'COMMIT'
+    print(('[nexus_contracts] lot incident recovery %s -> %s (lot=%s stock=%s event=%s) by source %s'):format(
+        lotId, tostring(result.result), tostring(result.lot_rc), tostring(result.stock_rc), tostring(result.event_rc), tostring(source)
+    ))
+    return ok, result.result
+end)
+
 exports('getDutyboardSnapshot', function(source)
     source = tonumber(source)
     if not source or source <= 0 then return nil end

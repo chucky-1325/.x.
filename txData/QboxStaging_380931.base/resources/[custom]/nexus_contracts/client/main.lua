@@ -294,6 +294,97 @@ end
 exports('openQuarantinePanel', openQuarantinePanel)
 RegisterCommand(NexusContractsConfig.quarantineAdminCommand, openQuarantinePanel, false)
 
+local openLotIncidentsPanel
+
+local LOT_INCIDENT_REASON_LABELS = {
+    invalid_delivery_state = 'Estado de entrega inconsistente',
+    delivery_transition_rejected = 'Transicion de entrega rechazada',
+    inventory_added_slot_unresolved = 'Slot de inventario no resuelto',
+    inventory_added_state_not_persisted = 'Estado de recogida no persistido',
+    invalid_persisted_contents = 'Contenido del lote ilegible',
+    delivery_pending_inventory_remove_failed = 'Fallo al retirar el paquete del inventario',
+}
+
+local function requestLotIncidentsList()
+    local list, err = lib.callback.await('nexus_contracts:server:listLotIncidents', false)
+    if err then
+        notify('No tienes acceso a esta herramienta.', 'error')
+        return nil
+    end
+    return list or {}
+end
+
+local function confirmLotId(expectedId)
+    local input = lib.inputDialog('Confirmar recuperacion', {
+        {
+            type = 'input',
+            label = 'Escribe el lot_id exacto para confirmar',
+            required = true,
+        },
+    })
+    if not input or not input[1] then return false end
+    return tostring(input[1]) == expectedId
+end
+
+local function runLotRecovery(lotId)
+    if not confirmLotId(lotId) then
+        notify('Confirmacion incorrecta. Cancelado.', 'error')
+        return
+    end
+
+    local ok, result = lib.callback.await('nexus_contracts:server:recoverLotIncident', false, lotId)
+    if ok then
+        notify(('Recuperacion completada para %s.'):format(lotId), 'success')
+    else
+        notify(('Recuperacion fallo: %s'):format(tostring(result)), 'error')
+    end
+    openLotIncidentsPanel()
+end
+
+openLotIncidentsPanel = function()
+    local list = requestLotIncidentsList()
+    if not list then return end
+
+    if #list == 0 then
+        notify('No hay incidencias de lotes pendientes.', 'inform')
+        return
+    end
+
+    local options = {}
+    for i = 1, #list do
+        local item = list[i]
+        if item.safe then
+            options[#options + 1] = {
+                title = item.lotId,
+                description = ('Citizenid: %s | Motivo: %s'):format(item.citizenid, item.incidentReason),
+                icon = 'fa-solid fa-triangle-exclamation',
+                onSelect = function()
+                    runLotRecovery(item.lotId)
+                end,
+            }
+        else
+            options[#options + 1] = {
+                title = item.lotId,
+                description = ('Revision manual requerida. Citizenid: %s | %s'):format(
+                    item.citizenid, LOT_INCIDENT_REASON_LABELS[item.incidentReason] or item.incidentReason
+                ),
+                icon = 'fa-solid fa-ban',
+                disabled = true,
+            }
+        end
+    end
+
+    lib.registerContext({
+        id = 'nexus_lot_incidents_list',
+        title = 'Incidencias de Suministro',
+        options = options,
+    })
+    lib.showContext('nexus_lot_incidents_list')
+end
+
+exports('openLotIncidentsPanel', openLotIncidentsPanel)
+RegisterCommand(NexusContractsConfig.lotIncidentsCommand, openLotIncidentsPanel, false)
+
 RegisterNetEvent('nexus_contracts:client:setActive', function(payload, contract)
     setActive(payload, contract)
 end)

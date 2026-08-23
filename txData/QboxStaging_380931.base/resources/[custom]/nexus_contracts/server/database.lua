@@ -343,6 +343,46 @@ function NexusContractsMarkAmbiguous(lotId, citizenid, reason)
     return true
 end
 
+function NexusContractsListLotIncidents()
+    return databaseCall('list_lot_incidents', function()
+        return MySQL.query.await([[
+            SELECT lot_id, citizenid, incident_reason, finalized_at
+            FROM nexus_mechanic_supply_lots
+            WHERE state = 'ambiguous'
+            ORDER BY finalized_at ASC
+        ]])
+    end) or {}
+end
+
+function NexusContractsRecoverLotIncident(lotId, stockKey)
+    local lot = databaseCall('get_lot_for_recovery', function()
+        return MySQL.single.await([[
+            SELECT incident_reason, contents
+            FROM nexus_mechanic_supply_lots
+            WHERE lot_id = ? AND state = 'ambiguous'
+            LIMIT 1
+        ]], { lotId })
+    end)
+    if not lot then return nil end
+
+    local metalscrap, iron, plastic = 0, 0, 0
+    if lot.incident_reason == 'inventory_removed_stock_commit_failed' then
+        local ok, contents = pcall(json.decode, lot.contents or '')
+        if ok and type(contents) == 'table' then
+            metalscrap = tonumber(contents.metalscrap) or 0
+            iron = tonumber(contents.iron) or 0
+            plastic = tonumber(contents.plastic) or 0
+        end
+    end
+
+    return databaseCall('recover_lot_incident', function()
+        local rows = MySQL.query.await('CALL sp_recover_civil_lot_incident(?, ?, ?, ?, ?)', {
+            lotId, stockKey, metalscrap, iron, plastic,
+        })
+        return rows and rows[1] or nil
+    end)
+end
+
 function NexusContractsListCraftQuarantines()
     return databaseCall('list_craft_quarantines', function()
         return MySQL.query.await([[

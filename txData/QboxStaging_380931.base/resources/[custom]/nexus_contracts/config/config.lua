@@ -3,6 +3,7 @@ NexusContractsConfig = {
     command = 'contracts',
     quarantineAdminCommand = 'craftquarantine',
     quarantineAdminAce = 'nexus.crafting.admin',
+    lotIncidentsCommand = 'supplyincidents',
     rateLimitBucket = 'default',
     interactDistance = 3.0,
     packageItem = 'nexus_contract_package',
