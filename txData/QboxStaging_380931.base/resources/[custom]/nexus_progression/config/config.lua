@@ -28,6 +28,18 @@ NexusProgressionConfig = {
             nexus_ems = {
                 ems = { maxXp = 100, maxReputation = 5 },
             },
+            nexus_laundering = {
+                criminal = { maxXp = 250, maxReputation = 5 },
+            },
+            nexus_blackmarket = {
+                criminal = { maxXp = 250, maxReputation = 5 },
+            },
+            nexus_labs = {
+                criminal = { maxXp = 250, maxReputation = 5 },
+            },
+            nexus_operations = {
+                criminal = { maxXp = 250, maxReputation = 5 },
+            },
         },
     },
 }
