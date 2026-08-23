@@ -1016,6 +1016,11 @@ CreateThread(function()
                 elseif lot.state == 'picked_up' then
                     finalized = NexusContractsLosePickedUp(lot.lot_id, lot.citizenid, 'expired')
                 end
+                if not finalized then
+                    print(('[nexus_contracts] CRITICAL: sweep expire lock failed lot=%s state=%s'):format(
+                        tostring(lot.lot_id), tostring(lot.state)
+                    ))
+                end
                 for src, active in pairs(activeContracts) do
                     if active.lotId == lot.lot_id then
                         if finalized then
@@ -1039,18 +1044,26 @@ CreateThread(function()
                         'expired',
                         'ttl_expired'
                     ) then
-                        NexusContractsMarkMechanicCraftAmbiguous(
+                        if not NexusContractsMarkMechanicCraftAmbiguous(
                             craft.reservation_id,
                             craft.citizenid,
                             'ttl_release_failed'
-                        )
+                        ) then
+                            print(('[nexus_contracts] CRITICAL: sweep ambiguous lock failed reservation=%s reason=ttl_release_failed'):format(
+                                tostring(craft.reservation_id)
+                            ))
+                        end
                     end
                 elseif craft.state == 'fulfilling' then
-                    NexusContractsMarkMechanicCraftAmbiguous(
+                    if not NexusContractsMarkMechanicCraftAmbiguous(
                         craft.reservation_id,
                         craft.citizenid,
                         'ttl_expired_while_fulfilling'
-                    )
+                    ) then
+                        print(('[nexus_contracts] CRITICAL: sweep ambiguous lock failed reservation=%s reason=ttl_expired_while_fulfilling'):format(
+                            tostring(craft.reservation_id)
+                        ))
+                    end
                 end
             end
         end
