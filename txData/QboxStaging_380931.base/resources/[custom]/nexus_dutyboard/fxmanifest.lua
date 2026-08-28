@@ -13,6 +13,7 @@ shared_scripts {
 }
 
 server_scripts {
+    'server/security_fallback.lua',
     'server/main.lua',
 }
 

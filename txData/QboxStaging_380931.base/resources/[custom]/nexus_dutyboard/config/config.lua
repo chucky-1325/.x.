@@ -14,4 +14,13 @@ NexusDutyboardConfig = {
 
     rateLimitBucket = 'dutyboard',
     localCooldownMs = 3000,
+
+    -- Usado solo por server/security_fallback.lua cuando nexus_bridge no esta
+    -- corriendo. 'dutyboard' no es un bucket propio en nexus_bridge tampoco --
+    -- ahi cae a rateLimits.default, asi que replicamos ese mismo default aqui.
+    security = {
+        rateLimits = {
+            default = { window = 10000, limit = 8 },
+        },
+    },
 }

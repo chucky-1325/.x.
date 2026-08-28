@@ -3,7 +3,13 @@ local cooldowns = {}
 local function dependenciesReady()
     return GetResourceState('qbx_core') == 'started'
         and GetResourceState('ox_target') == 'started'
-        and GetResourceState('nexus_bridge') == 'started'
+end
+
+local function rateLimit(source, bucket)
+    if GetResourceState('nexus_bridge') == 'started' then
+        return exports.nexus_bridge:rateLimit(source, bucket)
+    end
+    return NexusDutyboardSecurityFallback.rateLimit(source, bucket)
 end
 
 local function passesLocalCooldown(source)
@@ -66,7 +72,7 @@ lib.callback.register('nexus_dutyboard:server:toggleDuty', function(source)
     if distance > NexusDutyboardConfig.maxServerDistance then return false end
 
     if not passesLocalCooldown(source) then return false end
-    if not exports.nexus_bridge:rateLimit(source, NexusDutyboardConfig.rateLimitBucket) then return false end
+    if not rateLimit(source, NexusDutyboardConfig.rateLimitBucket) then return false end
 
     exports.qbx_core:SetJobDuty(source, not job.onduty)
 
