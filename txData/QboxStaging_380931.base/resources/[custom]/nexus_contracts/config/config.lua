@@ -6,6 +6,20 @@ NexusContractsConfig = {
     lotIncidentsCommand = 'supplyincidents',
     rateLimitBucket = 'default',
     interactDistance = 3.0,
+    -- Usado solo por server/security_fallback.lua cuando nexus_bridge no esta
+    -- corriendo. Valores en paridad con nexus_bridge/config/config.lua para que
+    -- el fallback y el modulo compartido se comporten igual.
+    security = {
+        rateLimits = {
+            default = { window = 10000, limit = 8 },
+        },
+        timedActions = {
+            minimumDuration = 500,
+            maximumDuration = 120000,
+            graceMs = 60000,
+            earlyToleranceMs = 250,
+        },
+    },
     packageItem = 'nexus_contract_package',
     expirySweepSeconds = 30,
     actionDurations = {
