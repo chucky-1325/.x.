@@ -92,9 +92,15 @@ local function getMemberBySource(source)
     return NexusGangsFetchMember(citizenid)
 end
 
+-- Puramente el sistema interno de permisos por rango de banda -- SIN bypass
+-- de admin embebido. El export publico 'hasGangPermission' llama a esta
+-- funcion directamente, asi que un bypass aqui se filtraria a cualquier
+-- consumidor futuro de ese export con cualquier string de permiso. El
+-- bypass de nexus_permissions.member_manage_override se aplica de forma
+-- explicita solo en los 2 call sites reales que lo necesitan: invite (mas
+-- abajo) y canManageTarget (ya lo hacia de forma explicita, sin pasar por
+-- esta funcion).
 local function hasPermission(source, permission)
-    if hasMemberManageOverride(source) then return true end
-
     local member = getMemberBySource(source)
     if not member then return false end
 
@@ -591,7 +597,7 @@ end)
 RegisterNetEvent('nexus_gangs:server:invite', function(targetId)
     local src = source
     if not rateLimit(src) then return end
-    if not hasPermission(src, 'invite') then return notify(src, 'No tienes permiso para invitar.', 'error') end
+    if not hasMemberManageOverride(src) and not hasPermission(src, 'invite') then return notify(src, 'No tienes permiso para invitar.', 'error') end
 
     local target = tonumber(targetId)
     if not target or not GetPlayerName(target) then return notify(src, 'Jugador no valido.', 'error') end
