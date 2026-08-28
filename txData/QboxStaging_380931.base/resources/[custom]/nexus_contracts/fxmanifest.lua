@@ -27,6 +27,5 @@ dependencies {
     'ox_lib',
     'oxmysql',
     'qbx_core',
-    'nexus_bridge',
     'ox_inventory',
 }
