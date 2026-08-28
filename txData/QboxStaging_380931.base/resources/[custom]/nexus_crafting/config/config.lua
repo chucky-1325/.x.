@@ -92,6 +92,7 @@ NexusCraftingConfig = {
         mechanic_bench = {
             label = 'Banco mecanico',
             type = 'job',
+            mode = 'mechanic',
             category = 'mechanic',
             job = 'mechanic',
             coords = vector3(-211.61, -1324.64, 30.89),
@@ -127,6 +128,17 @@ NexusCraftingConfig = {
             size = vector3(1.6, 1.2, 1.2),
             heading = 20.0,
             recipes = { 'lockpick_basic', 'scanner_shell', 'drill_kit', 'thermite_mix' },
+        },
+        gang_test_bench = {
+            label = 'Mesa de banda (prueba staging)',
+            type = 'gang',
+            mode = 'job',
+            category = 'illegal',
+            owner_gang = 'zzztestgang',
+            coords = vector3(480.0, -1310.0, 29.22),
+            size = vector3(1.6, 1.2, 1.2),
+            heading = 25.0,
+            recipes = { 'bandage_basic' },
         },
     },
 

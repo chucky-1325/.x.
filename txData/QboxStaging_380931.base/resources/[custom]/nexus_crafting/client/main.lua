@@ -99,6 +99,16 @@ local function getErrorMessage(reason, detail)
     if reason == 'quarantine_active' then return 'Hay una incidencia pendiente en este banco. Los materiales estan retenidos para revision administrativa.' end
     if reason == 'inventory_add_failed' then return 'No se pudo entregar el kit al inventario.' end
     if reason == 'expired' or reason == 'expired_session' then return 'La reserva de stock ha caducado.' end
+    if reason == 'station_or_recipe_missing_at_finish' then return 'La mesa o la receta ya no estan disponibles.' end
+    if reason == 'unsupported_flow' then return 'Esta sesion de fabricacion no es valida.' end
+    if reason == 'station_busy' then return 'Esta mesa ya tiene un trabajo en curso.' end
+    if reason == 'station_misconfigured' then return 'Esta mesa no esta configurada correctamente.' end
+    if reason == 'invalid_job' then return 'Ese trabajo ya no existe o ya se resolvio.' end
+    if reason == 'not_ready' then return 'El trabajo todavia no esta listo.' end
+    if reason == 'already_claimed' then return 'Alguien mas esta gestionando ese trabajo ahora mismo.' end
+    if reason == 'not_owner' then return 'Solo quien inicio el trabajo puede cancelarlo.' end
+    if reason == 'already_ready' then return 'Ya no se puede cancelar: el trabajo esta listo.' end
+    if reason == 'invalid_session' then return 'No se pudo identificar tu personaje.' end
     return 'No puedes fabricar esta receta.'
 end
 
@@ -256,6 +266,91 @@ local function openStationFallback(stationId, station)
     lib.showContext('nexus_crafting_fallback')
 end
 
+-- ============================================================
+-- Sistema de trabajos persistentes (mesas type='gang'). UI minima via
+-- ox_lib context, separada por completo de la NUI del flujo sincrono.
+-- ============================================================
+
+local function formatCountdown(seconds)
+    seconds = math.max(0, math.floor(seconds))
+    local minutes = math.floor(seconds / 60)
+    local secs = seconds % 60
+    if minutes > 0 then return ('%dm %ds'):format(minutes, secs) end
+    return ('%ds'):format(secs)
+end
+
+local function openJobStation(stationId, station)
+    local job = lib.callback.await('nexus_crafting:server:getStationJob', false, stationId)
+    local options = {}
+
+    if not job then
+        for i = 1, #(station.recipes or {}) do
+            local entry = station.recipes[i]
+            local recipe = entry.data
+            options[#options + 1] = {
+                title = recipe.label,
+                description = ('Duracion: %ss'):format(math.ceil((tonumber(recipe.duration) or 5000) / 1000)),
+                icon = 'hammer',
+                disabled = not entry.unlocked or #(entry.missing or {}) > 0,
+                onSelect = function()
+                    local ok, result = lib.callback.await('nexus_crafting:server:startJob', false, stationId, entry.id)
+                    if ok then
+                        notify(('Trabajo iniciado: %s'):format(result and result.label or recipe.label), 'success')
+                    else
+                        notify(getErrorMessage(result), 'error')
+                    end
+                end,
+            }
+        end
+    else
+        local now = tonumber(job.server_now)
+        local ready = now >= tonumber(job.ready_at)
+
+        if ready then
+            options[#options + 1] = {
+                title = 'Retirar resultado',
+                description = (station.type == 'gang' and job.owner_gang) and 'Verifica si es tuyo antes de confirmar.' or nil,
+                icon = 'box-open',
+                onSelect = function()
+                    local ok, result = lib.callback.await('nexus_crafting:server:collectJob', false, job.job_key)
+                    if ok then
+                        notify(result and result.isTheft and 'Has robado el trabajo.' or 'Has retirado el trabajo.', result and result.isTheft and 'inform' or 'success')
+                    else
+                        notify(getErrorMessage(result), 'error')
+                    end
+                end,
+            }
+        else
+            options[#options + 1] = {
+                title = 'Trabajo en curso',
+                description = ('Listo en %s'):format(formatCountdown(tonumber(job.ready_at) - now)),
+                icon = 'clock',
+                disabled = true,
+            }
+            options[#options + 1] = {
+                title = 'Cancelar trabajo',
+                description = 'Solo si tu iniciaste este trabajo.',
+                icon = 'ban',
+                onSelect = function()
+                    local ok, result = lib.callback.await('nexus_crafting:server:cancelJob', false, job.job_key)
+                    if ok then
+                        notify('Trabajo cancelado.', 'inform')
+                    else
+                        notify(getErrorMessage(result), 'error')
+                    end
+                end,
+            }
+        end
+    end
+
+    lib.registerContext({
+        id = 'nexus_crafting_job_station',
+        title = station.label or 'Mesa de banda',
+        options = options,
+    })
+    lib.showContext('nexus_crafting_job_station')
+end
+
 local function openStation(stationId)
     if isOpening or isOpen then return end
 
@@ -284,6 +379,13 @@ local function openStation(stationId)
 
     activeStation = stationId
     activeStationData = station
+
+    if station.type == 'gang' then
+        isOpening = false
+        openJobStation(stationId, station)
+        return
+    end
+
     isOpen = true
     nuiOpenAck = false
     SetNuiFocus(true, true)
@@ -555,6 +657,7 @@ local function openWorkbenchForm(existing)
             { label = 'Job unico', value = 'job' },
             { label = 'Varios jobs', value = 'jobs' },
             { label = 'Ilegal gang', value = 'illegal' },
+            { label = 'Banda (trabajos persistentes)', value = 'gang' },
         } },
         { type = 'select', label = 'Categoria', required = true, default = station.category or defaults.category, options = {
             { label = 'Civil', value = 'civil' },
@@ -571,6 +674,11 @@ local function openWorkbenchForm(existing)
         { type = 'number', label = 'Size Y', default = station.size and station.size.y or NexusCraftingConfig.editor.defaultSize.y },
         { type = 'number', label = 'Size Z', default = station.size and station.size.z or NexusCraftingConfig.editor.defaultSize.z },
         { type = 'checkbox', label = 'Mesa activa', checked = station.enabled ~= false },
+        { type = 'select', label = 'Modo', required = true, default = station.mode or '', options = {
+            { label = 'Ninguno (mesa inalcanzable)', value = '' },
+            { label = 'Trabajo persistente (mode=job)', value = 'job' },
+        } },
+        { type = 'input', label = 'Banda propietaria (owner_gang, solo modo job + acceso banda)', default = station.ownerGang or '' },
     })
 
     if not input then return end
@@ -595,6 +703,8 @@ local function openWorkbenchForm(existing)
         heading = heading,
         size = { x = input[9], y = input[10], z = input[11] },
         enabled = input[12] ~= false,
+        mode = input[13] ~= '' and input[13] or nil,
+        ownerGang = input[14] ~= '' and input[14] or nil,
     })
 end
 
@@ -633,6 +743,8 @@ local function saveStationOverride(station, coords, heading, enabled)
         heading = heading or station.heading or 0.0,
         size = station.size or NexusCraftingConfig.editor.defaultSize,
         enabled = enabled,
+        mode = station.mode,
+        ownerGang = station.ownerGang,
     })
 end
 

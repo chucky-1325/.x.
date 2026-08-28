@@ -45,16 +45,18 @@ end
 function NexusCraftingSaveWorkbench(bench)
     MySQL.update.await([[
         INSERT INTO nexus_crafting_workbenches
-            (id, label, type, category, enabled, job, jobs, model, recipes, x, y, z, heading, sx, sy, sz, created_by)
+            (id, label, type, mode, category, enabled, job, jobs, owner_gang, model, recipes, x, y, z, heading, sx, sy, sz, created_by)
         VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             label = VALUES(label),
             type = VALUES(type),
+            mode = VALUES(mode),
             category = VALUES(category),
             enabled = VALUES(enabled),
             job = VALUES(job),
             jobs = VALUES(jobs),
+            owner_gang = VALUES(owner_gang),
             model = VALUES(model),
             recipes = VALUES(recipes),
             x = VALUES(x),
@@ -68,10 +70,12 @@ function NexusCraftingSaveWorkbench(bench)
         bench.id,
         bench.label,
         bench.type,
+        bench.mode,
         bench.category,
         bench.enabled == false and 0 or 1,
         bench.job,
         json.encode(bench.jobs or {}),
+        bench.ownerGang,
         bench.model,
         json.encode(bench.recipes or {}),
         bench.coords.x,

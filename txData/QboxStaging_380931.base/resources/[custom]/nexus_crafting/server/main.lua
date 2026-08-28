@@ -81,7 +81,7 @@ local function isVerticalSliceScope(stationId, recipeId)
         and recipeId == config.recipeId
 end
 
-local function createCraftSession(source, stationId, recipeId, duration, reservation)
+local function createCraftSession(source, stationId, recipeId, duration, reservation, flow)
     local now = GetGameTimer()
     local token = ('%s:%s:%s:%s:%s'):format(source, stationId, recipeId, now, math.random(100000, 999999))
     craftSessions[source] = {
@@ -90,10 +90,11 @@ local function createCraftSession(source, stationId, recipeId, duration, reserva
         recipeId = recipeId,
         startedAt = now,
         duration = math.max(500, tonumber(duration) or 5000),
-        reservationId = reservation.reservationId,
-        lotId = reservation.lotId,
+        reservationId = reservation and reservation.reservationId or nil,
+        lotId = reservation and reservation.lotId or nil,
         citizenid = getCitizenId and getCitizenId(source) or nil,
-        expiresAt = reservation.expiresAt,
+        expiresAt = reservation and reservation.expiresAt or nil,
+        flow = flow, -- 'mechanic' | 'modular', fijado exclusivamente en canCraft; el cliente nunca lo ve ni lo envia
     }
     return token
 end
@@ -116,14 +117,23 @@ local function clearReserveAttempt(source, stationId, recipeId)
     reserveAttempts[reserveAttemptKey(source, stationId, recipeId)] = nil
 end
 
-local function consumeCraftSession(source, stationId, recipeId, token)
+-- Solo lectura: valida token/estacion/receta contra craftSessions, sin mover
+-- nada. Permite inspeccionar session.flow antes de decidir si se consume.
+local function peekCraftSession(source, stationId, recipeId, token)
     local session = craftSessions[source]
-    if not session or type(token) ~= 'string' or token ~= session.token then return false, 'invalid_session' end
-    if session.stationId ~= stationId or session.recipeId ~= recipeId then return false, 'invalid_session' end
+    if not session or type(token) ~= 'string' or token ~= session.token then return nil end
+    if session.stationId ~= stationId or session.recipeId ~= recipeId then return nil end
+    return session
+end
+
+local function consumeCraftSession(source, stationId, recipeId, token)
+    local session = peekCraftSession(source, stationId, recipeId, token)
+    if not session then return false, 'invalid_session' end
 
     local elapsed = GetGameTimer() - session.startedAt
     if elapsed < session.duration - 250 then return false, 'too_early' end
-    if elapsed > session.duration + 60000 or os.time() > tonumber(session.expiresAt) then
+    local expiresAt = tonumber(session.expiresAt)
+    if elapsed > session.duration + 60000 or (expiresAt and os.time() > expiresAt) then
         craftSessions[source] = nil
         return false, 'expired_session', session
     end
@@ -154,6 +164,10 @@ local function normalizeWorkbench(row)
     return {
         label = row.label,
         type = row.type or NexusCraftingConfig.defaultAccess.type,
+        -- Sin valor por defecto a proposito: una fila sin 'mode' explicito en
+        -- BD queda inalcanzable (mismo criterio que las mesas estaticas).
+        mode = row.mode,
+        owner_gang = row.owner_gang,
         category = row.category or NexusCraftingConfig.defaultAccess.category,
         enabled = tonumber(row.enabled) ~= 0,
         job = row.job,
@@ -168,8 +182,9 @@ local function normalizeWorkbench(row)
 end
 
 local function loadWorkbenches()
+    -- Las mesas dinamicas se cargan siempre, independientemente del estado
+    -- del subsistema mecanico -- ese ya no decide que mesas son alcanzables.
     runtimeStations = {}
-    if verticalSliceEnabled() then return end
 
     local rows = NexusCraftingFetchWorkbenches()
     for i = 1, #(rows or {}) do
@@ -177,28 +192,26 @@ local function loadWorkbenches()
     end
 end
 
+-- Valor por defecto seguro: una estacion sin 'mode' explicito (estatica o
+-- dinamica) se trata como no reconocida -- invisible en el mundo y no
+-- craftable, no solo lo segundo. Esto preserva exactamente el estado actual
+-- de las 4 mesas modulares que aun no tienen mode asignado.
 local function getStation(stationId)
     if type(stationId) ~= 'string' then return nil end
-    if verticalSliceEnabled() and stationId ~= verticalSliceConfig().stationId then return nil end
-    return runtimeStations[stationId] or NexusCraftingConfig.stations[stationId]
+    local station = runtimeStations[stationId] or NexusCraftingConfig.stations[stationId]
+    if not station or not station.mode then return nil end
+    return station
 end
 
 local function getAllStations()
     local stations = {}
 
-    if verticalSliceEnabled() then
-        local stationId = verticalSliceConfig().stationId
-        local station = NexusCraftingConfig.stations[stationId]
-        if station then stations[stationId] = station end
-        return stations
-    end
-
     for stationId, station in pairs(NexusCraftingConfig.stations) do
-        stations[stationId] = station
+        if station.mode then stations[stationId] = station end
     end
 
     for stationId, station in pairs(runtimeStations) do
-        stations[stationId] = station
+        if station.mode then stations[stationId] = station end
     end
 
     return stations
@@ -212,10 +225,12 @@ local function getStationSummaries()
             id = stationId,
             label = station.label,
             type = station.type,
+            mode = station.mode,
             category = station.category,
             enabled = station.enabled ~= false,
             job = station.job,
             jobs = station.jobs or {},
+            ownerGang = station.owner_gang,
             model = station.model or NexusCraftingConfig.defaultAccess.model,
             coords = { x = station.coords.x, y = station.coords.y, z = station.coords.z },
             size = { x = station.size.x, y = station.size.y, z = station.size.z },
@@ -246,9 +261,24 @@ local function sanitizeWorkbenchPayload(source, data)
     local stationType = tostring(data.type or NexusCraftingConfig.defaultAccess.type)
     local category = tostring(data.category or NexusCraftingConfig.defaultAccess.category)
     local enabled = data.enabled ~= false
-    local allowedTypes = { public = true, job = true, jobs = true, illegal = true }
+    local allowedTypes = { public = true, job = true, jobs = true, illegal = true, gang = true }
     if not allowedTypes[stationType] then return nil, 'invalid_type' end
     if not NexusCraftingConfig.categories[category] then return nil, 'invalid_category' end
+
+    -- 'mode' explicito, valor por defecto seguro: sin mode reconocido, la
+    -- mesa queda inalcanzable (getStation/getAllStations la filtran). Por
+    -- ahora el editor solo puede crear mode='job' -- no reactiva el flujo
+    -- mecanico ni las mesas modulares legacy.
+    local mode = data.mode ~= nil and tostring(data.mode):sub(1, 16) or nil
+    if mode ~= nil and mode ~= 'job' then return nil, 'invalid_mode' end
+
+    local ownerGang = data.ownerGang and tostring(data.ownerGang):lower():gsub('[^%w_%-]', ''):sub(1, 64) or nil
+    if mode == 'job' then
+        if stationType ~= 'gang' then return nil, 'job_mode_requires_gang_type' end
+        if not ownerGang or ownerGang == '' then return nil, 'owner_gang_required' end
+    else
+        ownerGang = nil
+    end
 
     local recipes = {}
     for i = 1, #(data.recipes or NexusCraftingConfig.defaultAccess.recipes) do
@@ -271,10 +301,12 @@ local function sanitizeWorkbenchPayload(source, data)
         id = id,
         label = label,
         type = stationType,
+        mode = mode,
         category = category,
         enabled = enabled,
         job = job,
         jobs = jobs,
+        ownerGang = ownerGang,
         model = model,
         recipes = recipes,
         coords = vector3(x, y, z),
@@ -320,7 +352,7 @@ local function hasStationAccess(source, station)
 
     if station.type == 'job' then
         local job = data.job
-        if verticalSliceEnabled() then
+        if station.mode == 'mechanic' then
             local grade = job and job.grade
             grade = type(grade) == 'table' and grade.level or grade
             return job
@@ -347,6 +379,15 @@ local function hasStationAccess(source, station)
 
         local requiredRep = tonumber(NexusCraftingConfig.illegalAccess and NexusCraftingConfig.illegalAccess.minimumCriminalReputation or 0)
         return (tonumber(getCriminalProgress(source).reputation) or 0) >= requiredRep
+    end
+
+    -- Mesas de banda: solo usadas por el sistema de trabajos persistentes
+    -- (nexus_crafting:server:startJob), nunca por el flujo sincrono de canCraft.
+    if station.type == 'gang' then
+        -- Abrir/ver la mesa es publico -- el gate de banda propietaria vive
+        -- exclusivamente en startJob. collectJob (retiro, incluido el robo)
+        -- tampoco pasa por esta funcion.
+        return true
     end
 
     return false
@@ -457,7 +498,7 @@ local function getStationRecipesForPlayer(source, stationId)
 
     if not station then return recipes end
 
-    if verticalSliceEnabled() then
+    if station.mode == 'mechanic' then
         if not isVerticalSliceScope(stationId, verticalSliceConfig().recipeId) then return recipes end
         local recipeId = verticalSliceConfig().recipeId
         local recipe = NexusCraftingUtils.getRecipe(recipeId)
@@ -612,19 +653,19 @@ local function refundIngredients(source, recipe)
 end
 
 lib.callback.register('nexus_crafting:server:getStation', function(source, stationId)
-    if verticalSliceEnabled() and not verticalSliceRuntimeReady then
-        return false, verticalSliceRuntimeReason or 'schema_not_ready'
-    end
     local station = getStation(stationId)
     if not station then return false, 'invalid_station' end
+    if station.mode == 'mechanic' and not verticalSliceRuntimeReady then
+        return false, verticalSliceRuntimeReason or 'schema_not_ready'
+    end
     if station.enabled == false and not isEditorAllowed(source) then return false, 'station_disabled' end
     if not hasStationAccess(source, station) then return false, 'no_access' end
-    if verticalSliceEnabled() and not isNearStation(source, station) then return false, 'too_far' end
+    if station.mode == 'mechanic' and not isNearStation(source, station) then return false, 'too_far' end
 
     local category = NexusCraftingUtils.getCategory(station.category)
-    local snapshot = verticalSliceEnabled() and getWorkshopStock(source) or nil
+    local snapshot = station.mode == 'mechanic' and getWorkshopStock(source) or nil
     local citizenid = getCitizenId(source)
-    local quarantine = verticalSliceEnabled() and citizenid and GetResourceState('nexus_contracts') == 'started'
+    local quarantine = station.mode == 'mechanic' and citizenid and GetResourceState('nexus_contracts') == 'started'
         and exports.nexus_contracts:isMechanicCraftQuarantined(citizenid)
         or nil
     return true, {
@@ -648,7 +689,8 @@ lib.callback.register('nexus_crafting:server:canCraft', function(source, station
     local recipe = NexusCraftingUtils.getRecipe(recipeId)
 
     if not station or not recipe then return false, 'invalid_recipe' end
-    if verticalSliceEnabled() then
+    if station.mode == 'job' then return false, 'use_job_system' end
+    if station.mode == 'mechanic' then
         if not verticalSliceRuntimeReady then
             return false, verticalSliceRuntimeReason or 'schema_not_ready'
         end
@@ -685,11 +727,16 @@ lib.callback.register('nexus_crafting:server:canCraft', function(source, station
         return true, {
             label = recipe.label,
             duration = duration,
-            sessionToken = createCraftSession(source, stationId, recipeId, duration, reservation),
+            sessionToken = createCraftSession(source, stationId, recipeId, duration, reservation, 'mechanic'),
             reservationId = reservation.reservationId,
             lotId = reservation.lotId,
         }
     end
+    -- Valor por defecto seguro: una estacion sin mode='modular' explicito
+    -- nunca cae en el flujo sincrono, aunque haya superado los chequeos de
+    -- arriba (getStation ya la habria bloqueado antes de llegar aqui, pero
+    -- esta es la segunda barrera, no la unica).
+    if station.mode ~= 'modular' then return false, 'station_disabled' end
     if station.enabled == false then return false, 'station_disabled' end
     if not NexusCraftingUtils.recipeAllowedAtStation(station, recipeId) then return false, 'recipe_not_allowed' end
     if not hasStationAccess(source, station) then return false, 'no_access' end
@@ -716,7 +763,7 @@ lib.callback.register('nexus_crafting:server:canCraft', function(source, station
         sensitive = recipe.sensitive == true,
         risk = recipe.risk,
         blueprint = recipe.blueprint,
-        sessionToken = createCraftSession(source, stationId, recipeId, duration),
+        sessionToken = createCraftSession(source, stationId, recipeId, duration, nil, 'modular'),
     }
 end)
 
@@ -725,7 +772,6 @@ lib.callback.register('nexus_crafting:server:getStations', function(source)
 end)
 
 lib.callback.register('nexus_crafting:server:editorList', function(source)
-    if verticalSliceEnabled() then return false, 'vertical_slice_locked' end
     if not isEditorAllowed(source) then return false, 'no_access' end
 
     return true, {
@@ -787,17 +833,33 @@ local function removeExactOutput(source, session, preferredSlot)
 end
 
 local function releaseOrBlock(source, session, reason)
+    if not session.reservationId then return true end
     local released = exports.nexus_contracts:releaseMechanicCraft(source, session.reservationId, reason)
     if released == true then return true end
     exports.nexus_contracts:markMechanicCraftAmbiguous(source, session.reservationId, reason .. '_release_failed')
     return false
 end
 
+-- Solo limpieza de tracking. Nunca toca la reserva en nexus_contracts.
+-- Usar tras un exito mecanico (la reserva ya se consumio via
+-- completeMechanicCraft y session.reservationId sigue poblado, pero no hay
+-- nada pendiente que liberar) y como paso final de abortFinishingSession.
+local function clearFulfillingSession(source, session)
+    if fulfillingSessions[source] == session then fulfillingSessions[source] = nil end
+end
+
+-- Reserva PENDIENTE (no completada): intenta liberarla o, si el release
+-- falla, la deja en cuarentena. Despues limpia el tracking. NUNCA usar tras
+-- un completeMechanicCraft exitoso.
+local function abortFinishingSession(source, session, reason)
+    local released = releaseOrBlock(source, session, reason)
+    clearFulfillingSession(source, session)
+    return released
+end
+
+local finishModularCraft -- forward-declaration: debe existir antes de finishMechanicCraft/finishCraft
+
 lib.callback.register('nexus_crafting:server:cancelCraft', function(source, sessionToken)
-    if not verticalSliceEnabled() then return false, 'unsupported_profile' end
-    if not verticalSliceRuntimeReady then
-        return false, verticalSliceRuntimeReason or 'schema_not_ready'
-    end
     local session = cancelCraftSession(source, sessionToken)
     if not session then return false, 'invalid_session' end
     if releaseOrBlock(source, session, 'player_cancelled') then
@@ -808,53 +870,25 @@ lib.callback.register('nexus_crafting:server:cancelCraft', function(source, sess
     return false, 'incident_pending'
 end)
 
-lib.callback.register('nexus_crafting:server:finishCraft', function(source, stationId, recipeId, sessionToken)
-    if not verticalSliceRuntimeReady then
-        return false, verticalSliceRuntimeReason or 'schema_not_ready'
-    end
-    if not isVerticalSliceScope(stationId, recipeId) then return false, 'recipe_not_allowed' end
-    if GetResourceState('nexus_bridge') == 'started'
-        and not exports.nexus_bridge:rateLimit(source, NexusCraftingConfig.rateLimitBucket) then
-        return false, 'rate_limited'
-    end
-
-    local sessionOk, sessionReason, session = consumeCraftSession(source, stationId, recipeId, sessionToken)
-    if not sessionOk then
-        if session and sessionReason == 'expired_session' then
-            if releaseOrBlock(source, session, 'ttl_expired') then
-                clearReserveAttempt(source, session.stationId, session.recipeId)
-            end
-        end
-        return false, sessionReason
-    end
-
-    local function stopTracking(resetReserveLimit)
-        if fulfillingSessions[source] == session then fulfillingSessions[source] = nil end
-        if resetReserveLimit then clearReserveAttempt(source, session.stationId, session.recipeId) end
-    end
-
+local function finishMechanicCraft(source, session)
     local config = verticalSliceConfig()
     if not exports.ox_inventory:CanCarryItem(source, config.outputItem, config.outputCount) then
-        local released = releaseOrBlock(source, session, 'inventory_full')
-        stopTracking(released)
+        local released = abortFinishingSession(source, session, 'inventory_full')
+        if released then clearReserveAttempt(source, session.stationId, session.recipeId) end
         return false, 'no_space'
     end
 
     local began, beginData = exports.nexus_contracts:beginMechanicCraft(source, session.reservationId)
     if began ~= true then
-        local released = releaseOrBlock(source, session, 'begin_failed')
-        stopTracking(released)
+        local released = abortFinishingSession(source, session, 'begin_failed')
+        if released then clearReserveAttempt(source, session.stationId, session.recipeId) end
         if not released then return false, 'incident_pending' end
         return false, beginData or 'transition_failed'
     end
     session.phase = 'fulfilling'
     if type(beginData) ~= 'table' or beginData.lotId ~= session.lotId then
-        exports.nexus_contracts:markMechanicCraftAmbiguous(
-            source,
-            session.reservationId,
-            'begin_lot_mismatch'
-        )
-        stopTracking(false)
+        exports.nexus_contracts:markMechanicCraftAmbiguous(source, session.reservationId, 'begin_lot_mismatch')
+        clearFulfillingSession(source, session)
         return false, 'incident_pending'
     end
 
@@ -866,8 +900,8 @@ lib.callback.register('nexus_crafting:server:finishCraft', function(source, stat
         metadata
     )
     if not added then
-        local released = releaseOrBlock(source, session, 'inventory_add_failed')
-        stopTracking(released)
+        local released = abortFinishingSession(source, session, 'inventory_add_failed')
+        if released then clearReserveAttempt(source, session.stationId, session.recipeId) end
         if not released then return false, 'incident_pending' end
         return false, 'inventory_add_failed'
     end
@@ -876,12 +910,8 @@ lib.callback.register('nexus_crafting:server:finishCraft', function(source, stat
     local outputSlot = findExactOutputSlot(source, session, slotNumber)
         or (slotNumber and findExactOutputSlot(source, session, nil))
     if not outputSlot then
-        exports.nexus_contracts:markMechanicCraftAmbiguous(
-            source,
-            session.reservationId,
-            'output_slot_unresolved'
-        )
-        stopTracking(false)
+        exports.nexus_contracts:markMechanicCraftAmbiguous(source, session.reservationId, 'output_slot_unresolved')
+        clearFulfillingSession(source, session)
         return false, 'incident_pending'
     end
 
@@ -891,32 +921,73 @@ lib.callback.register('nexus_crafting:server:finishCraft', function(source, stat
     )
     if completed ~= true then
         if removeExactOutput(source, session, outputSlot.slot) then
-            local released = releaseOrBlock(source, session, 'stock_commit_failed')
-            stopTracking(released)
+            local released = abortFinishingSession(source, session, 'stock_commit_failed')
+            if released then clearReserveAttempt(source, session.stationId, session.recipeId) end
             if not released then return false, 'incident_pending' end
             return false, completeReason or 'stock_commit_failed'
         end
-        exports.nexus_contracts:markMechanicCraftAmbiguous(
-            source,
-            session.reservationId,
-            'stock_commit_failed_output_not_recoverable'
-        )
-        stopTracking(false)
+        exports.nexus_contracts:markMechanicCraftAmbiguous(source, session.reservationId, 'stock_commit_failed_output_not_recoverable')
+        clearFulfillingSession(source, session)
         return false, 'incident_pending'
     end
 
-    stopTracking(true)
+    -- Exito: la reserva ya se consumio via completeMechanicCraft.
+    -- session.reservationId sigue poblado (no se autoborra) -- por eso aqui
+    -- NUNCA se llama abortFinishingSession/releaseOrBlock, solo tracking.
+    clearFulfillingSession(source, session)
+    clearReserveAttempt(source, session.stationId, session.recipeId)
     notify(source, 'Has fabricado 1x kit de reparacion.', 'success')
     return true, {
         item = config.outputItem,
         count = config.outputCount,
         lotId = session.lotId,
     }
+end
+
+lib.callback.register('nexus_crafting:server:finishCraft', function(source, stationId, recipeId, sessionToken)
+    local peeked = peekCraftSession(source, stationId, recipeId, sessionToken)
+    if not peeked then return false, 'invalid_session' end
+
+    if peeked.flow == 'mechanic' and not verticalSliceRuntimeReady then
+        -- La sesion NO se toca: sigue en craftSessions, reintentable.
+        return false, verticalSliceRuntimeReason or 'schema_not_ready'
+    end
+
+    if GetResourceState('nexus_bridge') == 'started'
+        and not exports.nexus_bridge:rateLimit(source, NexusCraftingConfig.rateLimitBucket) then
+        return false, 'rate_limited'
+    end
+
+    local sessionOk, sessionReason, session = consumeCraftSession(source, stationId, recipeId, sessionToken)
+    if not sessionOk then
+        if session and sessionReason == 'expired_session' then
+            local released = abortFinishingSession(source, session, 'ttl_expired')
+            if released then clearReserveAttempt(source, session.stationId, session.recipeId) end
+        end
+        return false, sessionReason
+    end
+
+    local station = getStation(session.stationId)
+    local recipe = NexusCraftingUtils.getRecipe(session.recipeId)
+    if not station or not recipe then
+        local released = abortFinishingSession(source, session, 'station_or_recipe_missing_at_finish')
+        if released then clearReserveAttempt(source, session.stationId, session.recipeId) end
+        return false, 'station_or_recipe_missing_at_finish'
+    end
+
+    if session.flow == 'mechanic' then
+        return finishMechanicCraft(source, session)
+    elseif session.flow == 'modular' then
+        return finishModularCraft(source, session, station, recipe)
+    end
+
+    local released = abortFinishingSession(source, session, 'unsupported_flow')
+    if released then clearReserveAttempt(source, session.stationId, session.recipeId) end
+    return false, 'unsupported_flow'
 end)
 
 RegisterNetEvent('nexus_crafting:server:saveWorkbench', function(data)
     local src = source
-    if verticalSliceEnabled() then return notify(src, 'El editor esta bloqueado en el perfil F1B.', 'error') end
     if not isEditorAllowed(src) then return notify(src, 'No tienes permiso para editar mesas.', 'error') end
     if GetResourceState('nexus_bridge') == 'started' and not exports.nexus_bridge:rateLimit(src, 'admin') then return end
 
@@ -927,10 +998,12 @@ RegisterNetEvent('nexus_crafting:server:saveWorkbench', function(data)
     runtimeStations[bench.id] = {
         label = bench.label,
         type = bench.type,
+        mode = bench.mode,
         category = bench.category,
         enabled = bench.enabled ~= false,
         job = bench.job,
         jobs = bench.jobs,
+        owner_gang = bench.ownerGang,
         model = bench.model,
         coords = bench.coords,
         size = bench.size,
@@ -945,10 +1018,16 @@ end)
 
 RegisterNetEvent('nexus_crafting:server:deleteWorkbench', function(stationId)
     local src = source
-    if verticalSliceEnabled() then return notify(src, 'El editor esta bloqueado en el perfil F1B.', 'error') end
     if not isEditorAllowed(src) then return notify(src, 'No tienes permiso para editar mesas.', 'error') end
     if type(stationId) ~= 'string' or not runtimeStations[stationId] then
         return notify(src, 'Solo se pueden eliminar mesas dinamicas.', 'error')
+    end
+    local activeJob = MySQL.scalar.await(
+        'SELECT id FROM nexus_crafting_jobs WHERE station_id = ? AND active_station_key IS NOT NULL',
+        { stationId }
+    )
+    if activeJob then
+        return notify(src, 'No se puede eliminar: hay un trabajo activo en esta mesa.', 'error')
     end
 
     NexusCraftingDeleteWorkbench(stationId)
@@ -957,77 +1036,111 @@ RegisterNetEvent('nexus_crafting:server:deleteWorkbench', function(stationId)
     notify(src, ('Mesa eliminada: %s'):format(stationId), 'success')
 end)
 
-RegisterNetEvent('nexus_crafting:server:craft', function(stationId, recipeId, sessionToken)
-    local src = source
-    if verticalSliceEnabled() then
-        print(('[nexus_crafting] blocked legacy craft event source=%s station=%s recipe=%s'):format(
-            src,
-            tostring(stationId),
-            tostring(recipeId)
-        ))
-        return
-    end
-    local station = getStation(stationId)
-    local recipe = NexusCraftingUtils.getRecipe(recipeId)
+finishModularCraft = function(source, session, station, recipe)
+    local stationId, recipeId = session.stationId, session.recipeId
 
-    if GetResourceState('nexus_bridge') == 'started' then
-        if not exports.nexus_bridge:rateLimit(src, NexusCraftingConfig.rateLimitBucket) then return end
+    if station.enabled == false then
+        local released = abortFinishingSession(source, session, 'station_disabled')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, 'Esta mesa esta desactivada.', 'error')
+        return false, 'station_disabled'
     end
-
-    if not station or not recipe then return end
-    local sessionOk, sessionReason = consumeCraftSession(src, stationId, recipeId, sessionToken)
-    if not sessionOk then
-        print(('[nexus_crafting] blocked craft without valid elapsed session source=%s station=%s recipe=%s reason=%s'):format(
-            src,
-            tostring(stationId),
-            tostring(recipeId),
-            tostring(sessionReason)
-        ))
-        return notify(src, 'La sesion de fabricacion no es valida.', 'error')
+    if not NexusCraftingUtils.recipeAllowedAtStation(station, recipeId) then
+        local released = abortFinishingSession(source, session, 'recipe_not_allowed')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        return false, 'recipe_not_allowed'
     end
-    if station.enabled == false then return notify(src, 'Esta mesa esta desactivada.', 'error') end
-    if not NexusCraftingUtils.recipeAllowedAtStation(station, recipeId) then return end
-    if not hasStationAccess(src, station) then return notify(src, 'No tienes acceso a esta mesa.', 'error') end
-    if not isNearStation(src, station) then return notify(src, 'Estas demasiado lejos de la mesa.', 'error') end
-    local unlocked, progress = hasRequiredLevel(src, recipe)
-    if not unlocked then return notify(src, ('Requiere nivel crafting %s.'):format(recipe.requiredLevel or 1), 'error') end
-    if not hasRecipeVisibility(progress, recipe) then return notify(src, 'Receta clasificada.', 'error') end
+    if not hasStationAccess(source, station) then
+        local released = abortFinishingSession(source, session, 'no_access')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, 'No tienes acceso a esta mesa.', 'error')
+        return false, 'no_access'
+    end
+    if not isNearStation(source, station) then
+        local released = abortFinishingSession(source, session, 'too_far')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, 'Estas demasiado lejos de la mesa.', 'error')
+        return false, 'too_far'
+    end
+    local unlocked, progress = hasRequiredLevel(source, recipe)
+    if not unlocked then
+        local released = abortFinishingSession(source, session, 'level_locked')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, ('Requiere nivel crafting %s.'):format(recipe.requiredLevel or 1), 'error')
+        return false, 'level_locked'
+    end
+    if not hasRecipeVisibility(progress, recipe) then
+        local released = abortFinishingSession(source, session, 'classified_recipe')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, 'Receta clasificada.', 'error')
+        return false, 'classified_recipe'
+    end
 
     local hasRep, requiredReputation = hasRequiredReputation(progress, recipe)
-    if not hasRep then return notify(src, ('Requiere reputacion crafting %s.'):format(requiredReputation), 'error') end
-
-    local blueprintOk, blueprintItem = hasBlueprint(src, recipe)
-    if not blueprintOk then return notify(src, ('Requiere plano: %s'):format(blueprintItem), 'error') end
-
-    local missing = getMissingIngredients(src, recipe)
-    if #missing > 0 then return notify(src, 'Te faltan materiales.', 'error') end
-
-    if not exports.ox_inventory:CanCarryItem(src, recipe.output.item, recipe.output.count or 1) then
-        return notify(src, 'No tienes espacio suficiente.', 'error')
+    if not hasRep then
+        local released = abortFinishingSession(source, session, 'reputation_locked')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, ('Requiere reputacion crafting %s.'):format(requiredReputation), 'error')
+        return false, 'reputation_locked'
     end
 
-    if not removeIngredients(src, recipe) then
-        return notify(src, 'No se pudieron consumir los materiales.', 'error')
+    local blueprintOk, blueprintItem = hasBlueprint(source, recipe)
+    if not blueprintOk then
+        local released = abortFinishingSession(source, session, 'missing_blueprint')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, ('Requiere plano: %s'):format(blueprintItem), 'error')
+        return false, 'missing_blueprint'
     end
 
-    local added = exports.ox_inventory:AddItem(src, recipe.output.item, recipe.output.count or 1)
+    local missing = getMissingIngredients(source, recipe)
+    if #missing > 0 then
+        local released = abortFinishingSession(source, session, 'missing_items')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, 'Te faltan materiales.', 'error')
+        return false, 'missing_items'
+    end
+
+    if not exports.ox_inventory:CanCarryItem(source, recipe.output.item, recipe.output.count or 1) then
+        local released = abortFinishingSession(source, session, 'no_space')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, 'No tienes espacio suficiente.', 'error')
+        return false, 'no_space'
+    end
+
+    if not removeIngredients(source, recipe) then
+        local released = abortFinishingSession(source, session, 'ingredients_consume_failed')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, 'No se pudieron consumir los materiales.', 'error')
+        return false, 'ingredients_consume_failed'
+    end
+
+    local added = exports.ox_inventory:AddItem(source, recipe.output.item, recipe.output.count or 1)
     if not added then
-        refundIngredients(src, recipe)
-        return notify(src, 'No se pudo entregar el resultado.', 'error')
+        refundIngredients(source, recipe)
+        local released = abortFinishingSession(source, session, 'inventory_add_failed')
+        if released then clearReserveAttempt(source, stationId, recipeId) end
+        notify(source, 'No se pudo entregar el resultado.', 'error')
+        return false, 'inventory_add_failed'
     end
 
-    local citizenid = getCitizenId(src)
+    -- Exito: session.reservationId siempre es nil en flow='modular', asi que
+    -- solo hace falta limpiar tracking -- no hay nada que abortFinishingSession
+    -- pudiera liberar, pero se mantiene la simetria con el flujo mecanico.
+    clearFulfillingSession(source, session)
+    clearReserveAttempt(source, stationId, recipeId)
+
+    local citizenid = getCitizenId(source)
     local chance = recipe.risk and tonumber(recipe.risk.policeAlertChance or 0) or 0
     local territoryContext
-    chance, territoryContext = applyTerritoryRisk(src, station, chance)
-    local policeAlert = recipe.sensitive == true and notifyPoliceRisk(src, station, recipe, chance) or false
+    chance, territoryContext = applyTerritoryRisk(source, station, chance)
+    local policeAlert = recipe.sensitive == true and notifyPoliceRisk(source, station, recipe, chance) or false
 
     if citizenid then
         NexusCraftingLog(citizenid, stationId, recipeId, recipe.output)
         if recipe.sensitive == true then
             NexusCraftingLogSensitive({
                 citizenid = citizenid,
-                source = src,
+                source = source,
                 stationId = stationId,
                 recipeId = recipeId,
                 output = recipe.output,
@@ -1040,7 +1153,7 @@ RegisterNetEvent('nexus_crafting:server:craft', function(stationId, recipeId, se
 
         if GetResourceState('nexus_progression') == 'started' then
             exports.nexus_progression:addProgression(citizenid, 'crafting', recipe.xp or 0, recipe.reputation or 0)
-            TriggerClientEvent('nexus_progression:client:tick', src, 'crafting', recipe.xp or 0, recipe.reputation or 0)
+            TriggerClientEvent('nexus_progression:client:tick', source, 'crafting', recipe.xp or 0, recipe.reputation or 0)
 
             local criminalConfig = NexusCraftingConfig.criminalProgression or {}
             local shouldRewardCriminal = criminalConfig.enabled
@@ -1051,18 +1164,19 @@ RegisterNetEvent('nexus_crafting:server:craft', function(stationId, recipeId, se
                 local criminalXp = math.floor((tonumber(recipe.xp) or 0) * (tonumber(criminalConfig.xpMultiplier) or 0.25))
                 local criminalRep = tonumber(criminalConfig.reputation) or 1
                 exports.nexus_progression:addProgression(citizenid, 'criminal', criminalXp, criminalRep)
-                TriggerClientEvent('nexus_progression:client:tick', src, 'criminal', criminalXp, criminalRep)
+                TriggerClientEvent('nexus_progression:client:tick', source, 'criminal', criminalXp, criminalRep)
 
                 if GetResourceState('nexus_territories') == 'started' then
-                    exports.nexus_territories:addInfluenceAtCoords(src, station.coords, criminalRep, 'illegal_crafting')
+                    exports.nexus_territories:addInfluenceAtCoords(source, station.coords, criminalRep, 'illegal_crafting')
                 end
             end
         end
     end
 
     local territoryText = territoryContext and territoryContext.rivalInControlledZone and (' | territorio rival: %s'):format(territoryContext.owner) or ''
-    notify(src, ('Has creado: %sx %s%s'):format(recipe.output.count or 1, recipe.label, territoryText), 'success')
-end)
+    notify(source, ('Has creado: %sx %s%s'):format(recipe.output.count or 1, recipe.label, territoryText), 'success')
+    return true, { item = recipe.output.item, count = recipe.output.count or 1 }
+end
 
 AddEventHandler('playerDropped', function()
     craftSessions[source] = nil
@@ -1080,21 +1194,43 @@ AddEventHandler('onResourceStop', function(resource)
         print('[nexus_crafting] Phase 1B closed while nexus_contracts restarts')
         return
     end
-    if resource ~= GetCurrentResourceName() or not verticalSliceEnabled() then return end
-    if GetResourceState('nexus_contracts') ~= 'started' then return end
+    -- Este barrido cubre sesiones de AMBOS flow (mecanico y modular), asi que
+    -- ya no depende de verticalSliceEnabled() -- debe correr aunque el
+    -- subsistema mecanico este apagado y solo haya sesiones modulares en curso.
+    if resource ~= GetCurrentResourceName() then return end
+
+    -- craftSessions: releaseOrBlock ya es no-op seguro para sesiones modulares
+    -- (sin reservationId), asi que este bucle corre siempre, sin depender de
+    -- nexus_contracts.
     for src, session in pairs(craftSessions) do
         releaseOrBlock(src, session, 'crafting_resource_stopped')
     end
+
     for src, session in pairs(fulfillingSessions) do
-        local queued, queueReason = exports.nexus_contracts:queueMechanicCraftAmbiguousFromCraftingStop(
-            session.reservationId,
-            session.citizenid,
-            'crafting_resource_stopped_while_fulfilling'
-        )
-        if queued ~= true then
-            print(('^1[nexus_crafting] failed to queue ambiguous fulfilling reservation=%s reason=%s^7'):format(
-                tostring(session.reservationId),
-                tostring(queueReason)
+        if session.flow == 'mechanic' then
+            -- Solo esta rama necesita nexus_contracts de verdad.
+            if GetResourceState('nexus_contracts') == 'started' then
+                local queued, queueReason = exports.nexus_contracts:queueMechanicCraftAmbiguousFromCraftingStop(
+                    session.reservationId,
+                    session.citizenid,
+                    'crafting_resource_stopped_while_fulfilling'
+                )
+                if queued ~= true then
+                    print(('^1[nexus_crafting] failed to queue ambiguous fulfilling reservation=%s reason=%s^7'):format(
+                        tostring(session.reservationId),
+                        tostring(queueReason)
+                    ))
+                end
+            else
+                print(('^1[nexus_crafting] sesion mecanica abandonada en fulfillingSessions sin nexus_contracts disponible para escalar, source=%s reservationId=%s^7'):format(
+                    tostring(src),
+                    tostring(session.reservationId)
+                ))
+            end
+        else
+            print(('[nexus_crafting] sesion modular abandonada en fulfillingSessions al detener el recurso, source=%s citizenid=%s'):format(
+                tostring(src),
+                tostring(session.citizenid)
             ))
         end
     end
@@ -1113,7 +1249,325 @@ AddEventHandler('onResourceStart', function(resource)
     loadWorkbenches()
     if verticalSliceEnabled() then
         startReadinessProbe('crafting_resource_start')
-        return
     end
-    print('[nexus_crafting] crafting modular cargado')
+    print(('[nexus_crafting] crafting cargado (subsistema mecanico: %s)'):format(
+        verticalSliceEnabled() and 'activo' or 'inactivo'
+    ))
+end)
+
+-- ============================================================
+-- Sistema de trabajos persistentes por mesa (Fase 1)
+-- Subsistema completamente separado del flujo mecanico de reservas
+-- (nexus_contracts) y del flujo sincrono anterior (craftSessions /
+-- fulfillingSessions / finishCraft). No comparte tablas ni sesiones.
+-- ============================================================
+
+local JOB_EXPIRY_SECONDS = 72 * 3600
+local JOB_CLAIM_LEASE_SECONDS = 30
+local JOB_PREPARING_STALE_SECONDS = 120
+
+local function generateJobToken(prefix, source)
+    return ('%s-%s-%s-%s'):format(prefix, GetGameTimer(), math.random(100000, 999999), tostring(source))
+end
+
+local function insertJobEvent(jobId, eventType, actorCitizenid, details)
+    MySQL.insert.await([[
+        INSERT INTO nexus_crafting_job_events (job_id, event_type, actor_citizenid, transition_key, details)
+        VALUES (?, ?, ?, ?, ?)
+    ]], {
+        jobId,
+        eventType,
+        actorCitizenid,
+        ('%s:%s:%s:%s'):format(jobId, eventType, GetGameTimer(), math.random(100000, 999999)),
+        details and json.encode(details) or nil,
+    })
+end
+
+local function getJobByKey(jobKey)
+    if type(jobKey) ~= 'string' then return nil end
+    return MySQL.single.await('SELECT * FROM nexus_crafting_jobs WHERE job_key = ?', { jobKey })
+end
+
+-- Remueve ingredientes uno a uno, sin usar removeIngredients() (esa funcion no
+-- informa que se removio exactamente si falla a medio camino). Aqui se necesita
+-- saber con certeza que compensar, no adivinar.
+local function commitJobIngredients(source, recipe)
+    local removed = {}
+    for i = 1, #(recipe.ingredients or {}) do
+        local ingredient = recipe.ingredients[i]
+        local ok = exports.ox_inventory:RemoveItem(source, ingredient.item, ingredient.count)
+        if not ok then
+            return false, removed
+        end
+        removed[#removed + 1] = { item = ingredient.item, count = ingredient.count }
+    end
+    return true, removed
+end
+
+local function compensateJobIngredients(source, removedList)
+    local allOk = true
+    for i = 1, #removedList do
+        local ok = exports.ox_inventory:AddItem(source, removedList[i].item, removedList[i].count)
+        if not ok then allOk = false end
+    end
+    return allOk
+end
+
+local function revertJobClaim(jobId, claimKey, claimAction)
+    MySQL.update.await([[
+        UPDATE nexus_crafting_jobs
+        SET state='in_progress', claim_action=NULL, claim_actor_citizenid=NULL, claim_key=NULL, claim_started_at=NULL
+        WHERE id=? AND state='claiming' AND claim_action=? AND claim_key=?
+    ]], { jobId, claimAction, claimKey })
+end
+
+lib.callback.register('nexus_crafting:server:getStationJob', function(source, stationId)
+    if type(stationId) ~= 'string' then return nil end
+    local job = MySQL.single.await([[
+        SELECT job_key, recipe_id, station_type, owner_gang, state, ready_at,
+               initiator_citizenid, initiator_gang
+        FROM nexus_crafting_jobs
+        WHERE station_id = ? AND active_station_key IS NOT NULL
+    ]], { stationId })
+    if not job then return nil end
+    -- El cliente no tiene os.time() garantizado (es una API server-only en
+    -- FiveM) -- se manda la hora del servidor junto con ready_at para que
+    -- calcule la cuenta regresiva sin depender de ningun native de tiempo.
+    job.server_now = os.time()
+    return job
+end)
+
+lib.callback.register('nexus_crafting:server:startJob', function(source, stationId, recipeId)
+    local station = getStation(stationId)
+    local recipe = NexusCraftingUtils.getRecipe(recipeId)
+    if not station or not recipe then return false, 'invalid_recipe' end
+    if station.enabled == false then return false, 'station_disabled' end
+    if not NexusCraftingUtils.recipeAllowedAtStation(station, recipeId) then return false, 'recipe_not_allowed' end
+
+    if station.type == 'gang' then
+        if not station.owner_gang or station.owner_gang == '' then return false, 'station_misconfigured' end
+        if GetResourceState('nexus_gangs') ~= 'started' then return false, 'no_access' end
+        local gang = exports.nexus_gangs:getPlayerGang(source)
+        if not (gang and gang.name == station.owner_gang) then return false, 'no_access' end
+    elseif not hasStationAccess(source, station) then
+        return false, 'no_access'
+    end
+    if not isNearStation(source, station) then return false, 'too_far' end
+
+    local unlocked, progress = hasRequiredLevel(source, recipe)
+    if not unlocked then return false, 'level_locked' end
+    if not hasRecipeVisibility(progress, recipe) then return false, 'classified_recipe' end
+    if not hasRequiredReputation(progress, recipe) then return false, 'reputation_locked' end
+    if not hasBlueprint(source, recipe) then return false, 'missing_blueprint' end
+    if #getMissingIngredients(source, recipe) > 0 then return false, 'missing_items' end
+
+    local citizenid = getCitizenId(source)
+    if not citizenid then return false, 'invalid_session' end
+
+    local gangData = GetResourceState('nexus_gangs') == 'started' and exports.nexus_gangs:getPlayerGang(source) or nil
+    local initiatorGang = gangData and gangData.name ~= 'none' and gangData.name or nil
+
+    local jobKey = generateJobToken('JOB', source)
+    local readyAt = os.time() + math.ceil((tonumber(recipe.duration) or 5000) / 1000)
+    local outputSnapshot = json.encode({
+        item = recipe.output.item,
+        count = recipe.output.count or 1,
+    })
+
+    -- pcall: no se puede confirmar con certeza si un choque contra la UNIQUE KEY
+    -- de active_station_key (mesa ocupada) devuelve nil limpio o lanza un error
+    -- Lua a traves de oxmysql -- se cubre cualquiera de los dos casos igual.
+    local insertOk, jobId = pcall(function()
+        return MySQL.insert.await([[
+            INSERT INTO nexus_crafting_jobs
+                (job_key, station_id, recipe_id, initiator_citizenid, initiator_gang,
+                 station_type, owner_gang, output_snapshot, state, ready_at, active_station_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'preparing', ?, ?)
+        ]], {
+            jobKey, stationId, recipeId, citizenid, initiatorGang,
+            station.type, station.owner_gang, outputSnapshot, readyAt, stationId,
+        })
+    end)
+
+    if not insertOk or not jobId or jobId == 0 then
+        return false, 'station_busy'
+    end
+
+    insertJobEvent(jobId, 'started', citizenid, { stationId = stationId, recipeId = recipeId })
+
+    local committed, removedList = commitJobIngredients(source, recipe)
+    if not committed then
+        local refunded = compensateJobIngredients(source, removedList)
+        MySQL.update.await([[
+            UPDATE nexus_crafting_jobs
+            SET state = IF(?, 'cancelled', 'refund_pending'), active_station_key = NULL,
+                cancel_reason = 'ingredients_commit_failed', ingredients_snapshot = ?
+            WHERE id = ? AND state = 'preparing'
+        ]], { refunded, json.encode(removedList), jobId })
+        insertJobEvent(jobId,
+            refunded and 'ingredients_commit_failed_refunded' or 'ingredients_commit_failed_unrefunded',
+            citizenid, { removed = removedList })
+        return false, 'missing_items'
+    end
+
+    MySQL.update.await(
+        "UPDATE nexus_crafting_jobs SET state='in_progress', ingredients_snapshot=? WHERE id=? AND state='preparing'",
+        { json.encode(removedList), jobId }
+    )
+    insertJobEvent(jobId, 'ingredients_committed', citizenid, {})
+
+    notify(source, ('Trabajo iniciado: %s'):format(recipe.label), 'success')
+    return true, { jobKey = jobKey, readyAt = readyAt, label = recipe.label }
+end)
+
+lib.callback.register('nexus_crafting:server:collectJob', function(source, jobKey)
+    local job = getJobByKey(jobKey)
+    if not job then return false, 'invalid_job' end
+    local station = getStation(job.station_id)
+    if not station or not isNearStation(source, station) then return false, 'too_far' end
+    if job.state ~= 'in_progress' then return false, 'invalid_job' end
+    if os.time() < tonumber(job.ready_at) then return false, 'not_ready' end
+
+    local citizenid = getCitizenId(source)
+    if not citizenid then return false, 'invalid_session' end
+
+    local claimKey = generateJobToken('CLAIM', source)
+    local claimedRows = MySQL.update.await([[
+        UPDATE nexus_crafting_jobs
+        SET state='claiming', claim_action='collect', claim_actor_citizenid=?,
+            claim_key=?, claim_started_at=UNIX_TIMESTAMP()
+        WHERE job_key=? AND state='in_progress' AND ready_at <= UNIX_TIMESTAMP()
+    ]], { citizenid, claimKey, jobKey })
+
+    if claimedRows ~= 1 then return false, 'already_claimed' end
+
+    -- Revalidar cercania: el jugador pudo alejarse entre el pre-chequeo y ganar el claim.
+    if not isNearStation(source, station) then
+        revertJobClaim(job.id, claimKey, 'collect')
+        return false, 'too_far'
+    end
+
+    local outputSnapshot = json.decode(job.output_snapshot)
+    local gangData = GetResourceState('nexus_gangs') == 'started' and exports.nexus_gangs:getPlayerGang(source) or nil
+    local collectorGang = gangData and gangData.name or 'none'
+    local isTheft = (job.station_type == 'gang') and (collectorGang ~= job.owner_gang)
+
+    local added = exports.ox_inventory:AddItem(source, outputSnapshot.item, outputSnapshot.count)
+    if not added then
+        revertJobClaim(job.id, claimKey, 'collect')
+        return false, 'no_space'
+    end
+
+    local finalizedRows = MySQL.update.await([[
+        UPDATE nexus_crafting_jobs
+        SET state='collected', active_station_key=NULL, collected_at=NOW(),
+            collected_by_citizenid=?, is_theft=?,
+            claim_action=NULL, claim_actor_citizenid=NULL, claim_key=NULL, claim_started_at=NULL
+        WHERE id=? AND state='claiming' AND claim_action='collect' AND claim_key=?
+    ]], { citizenid, isTheft and 1 or 0, job.id, claimKey })
+
+    if finalizedRows ~= 1 then
+        local removedBack = exports.ox_inventory:RemoveItem(source, outputSnapshot.item, outputSnapshot.count)
+        insertJobEvent(job.id,
+            removedBack and 'collect_finalize_failed_compensated' or 'collect_finalize_failed_uncompensated',
+            citizenid, { claim_key = claimKey })
+        MySQL.update.await(
+            "UPDATE nexus_crafting_jobs SET state='ambiguous', active_station_key=NULL WHERE id=? AND state='claiming' AND claim_action='collect' AND claim_key=?",
+            { job.id, claimKey }
+        )
+        return false, 'incident_pending'
+    end
+
+    insertJobEvent(job.id, isTheft and 'stolen' or 'collected', citizenid, { is_theft = isTheft })
+
+    if isTheft then
+        local initiatorPlayer = exports.qbx_core:GetPlayerByCitizenId(job.initiator_citizenid)
+        if initiatorPlayer then
+            notify(initiatorPlayer.PlayerData.source,
+                ('Te han robado un trabajo en %s.'):format(station.label or job.station_id), 'error')
+        end
+    end
+
+    notify(source,
+        isTheft and ('Has robado: %sx %s'):format(outputSnapshot.count, outputSnapshot.item)
+                 or ('Has retirado: %sx %s'):format(outputSnapshot.count, outputSnapshot.item),
+        'success')
+    return true, { item = outputSnapshot.item, count = outputSnapshot.count, isTheft = isTheft }
+end)
+
+lib.callback.register('nexus_crafting:server:cancelJob', function(source, jobKey)
+    local job = getJobByKey(jobKey)
+    if not job then return false, 'invalid_job' end
+    local station = getStation(job.station_id)
+    if not station or not isNearStation(source, station) then return false, 'too_far' end
+
+    local citizenid = getCitizenId(source)
+    if not citizenid then return false, 'invalid_session' end
+    if job.initiator_citizenid ~= citizenid then return false, 'not_owner' end
+    if job.state ~= 'in_progress' then return false, 'invalid_job' end
+    if os.time() >= tonumber(job.ready_at) then return false, 'already_ready' end
+
+    local claimKey = generateJobToken('CLAIM', source)
+    local claimedRows = MySQL.update.await([[
+        UPDATE nexus_crafting_jobs
+        SET state='claiming', claim_action='cancel', claim_actor_citizenid=?,
+            claim_key=?, claim_started_at=UNIX_TIMESTAMP()
+        WHERE job_key=? AND initiator_citizenid=? AND state='in_progress' AND ready_at > UNIX_TIMESTAMP()
+    ]], { citizenid, claimKey, jobKey, citizenid })
+
+    if claimedRows ~= 1 then return false, 'already_claimed' end
+
+    if not isNearStation(source, station) then
+        revertJobClaim(job.id, claimKey, 'cancel')
+        return false, 'too_far'
+    end
+
+    local ingredients = json.decode(job.ingredients_snapshot or '[]') or {}
+    local refunded = true
+    for i = 1, #ingredients do
+        local ok = exports.ox_inventory:AddItem(source, ingredients[i].item, ingredients[i].count)
+        if not ok then refunded = false end
+    end
+
+    local finalizedRows = MySQL.update.await([[
+        UPDATE nexus_crafting_jobs
+        SET state = IF(?, 'cancelled', 'refund_pending'), active_station_key = NULL, cancel_reason = 'player_cancelled',
+            claim_action=NULL, claim_actor_citizenid=NULL, claim_key=NULL, claim_started_at=NULL
+        WHERE id=? AND state='claiming' AND claim_action='cancel' AND claim_key=?
+    ]], { refunded, job.id, claimKey })
+
+    if finalizedRows ~= 1 then
+        insertJobEvent(job.id, 'cancel_finalize_failed', citizenid, { claim_key = claimKey, refunded = refunded })
+        MySQL.update.await(
+            "UPDATE nexus_crafting_jobs SET state='ambiguous', active_station_key=NULL WHERE id=? AND state='claiming' AND claim_action='cancel' AND claim_key=?",
+            { job.id, claimKey }
+        )
+        return false, 'incident_pending'
+    end
+
+    insertJobEvent(job.id, refunded and 'cancelled' or 'refund_failed', citizenid, { refunded = refunded })
+    notify(source,
+        refunded and 'Trabajo cancelado, materiales devueltos.'
+                  or 'Trabajo cancelado. Hubo un problema devolviendo materiales; queda registrado para revision.',
+        refunded and 'success' or 'error')
+    return true
+end)
+
+CreateThread(function()
+    Wait(5000)
+    MySQL.update.await(
+        "UPDATE nexus_crafting_jobs SET state='ambiguous', active_station_key=NULL WHERE state='preparing' AND started_at < NOW() - INTERVAL 2 MINUTE"
+    )
+
+    while true do
+        Wait(60000)
+        MySQL.update.await(
+            "UPDATE nexus_crafting_jobs SET state='expired', active_station_key=NULL WHERE state='in_progress' AND ready_at <= UNIX_TIMESTAMP() - ?",
+            { JOB_EXPIRY_SECONDS }
+        )
+        MySQL.update.await(
+            "UPDATE nexus_crafting_jobs SET state='ambiguous', active_station_key=NULL WHERE state='claiming' AND claim_started_at < UNIX_TIMESTAMP() - ?",
+            { JOB_CLAIM_LEASE_SECONDS }
+        )
+    end
 end)
