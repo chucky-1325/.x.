@@ -37,6 +37,15 @@ NexusPermissionsConfig = {
     -- El backdoor NexusBlackmarketConfig.adminIdentifiers se retiro en esta
     -- migracion: quien necesite ese acceso ahora recibe un rol explicito de
     -- nexus_permissions, sin ningun identifier hardcodeado sustituto.
+    --
+    -- Fase 5: nexus_territories.editor_manage (generico) se separa en
+    -- editor_view (solo ver/abrir el editor -- getEditorZones + el comando
+    -- /territoryeditor, ninguno muta nada) y dos permisos de mutacion
+    -- independientes: zone_save y zone_delete -- separados a proposito
+    -- porque eliminar una zona dinamica es mas destructivo (cascada sobre
+    -- influencia) que guardarla/crearla. graffiti_admin, influence_grant y
+    -- airdrop_admin ya mapeaban 1:1 a una accion real desde la semilla de
+    -- Fase 0 -- mantienen su nombre, solo dejan de ser placeholders.
     PermissionCatalog = {
         ['qbx_mdt.admin_access'] = { resource = 'qbx_mdt', label = 'Acceso administrativo a MDT sin ser policia' },
         ['handling_lab.use'] = { resource = 'handling_lab', label = 'Usar los comandos del laboratorio de handling' },
@@ -55,7 +64,9 @@ NexusPermissionsConfig = {
         ['nexus_labs.progression_bypass'] = { resource = 'nexus_labs', label = 'Bypass de rango de banda y reputacion criminal para usar un lab' },
         ['nexus_labs.territory_bypass'] = { resource = 'nexus_labs', label = 'Bypass de bloqueo por zona rival y minimo de influencia para usar un lab' },
         ['nexus_labs.sabotage_bypass'] = { resource = 'nexus_labs', label = 'Bypass de reputacion criminal para sabotear (el rango de banda nunca tiene bypass)' },
-        ['nexus_territories.editor_manage'] = { resource = 'nexus_territories', label = 'Ver, guardar y eliminar zonas de territorio' },
+        ['nexus_territories.editor_view'] = { resource = 'nexus_territories', label = 'Ver y abrir el editor de zonas de territorio (solo lectura)' },
+        ['nexus_territories.zone_save'] = { resource = 'nexus_territories', label = 'Crear/guardar una zona dinamica de territorio' },
+        ['nexus_territories.zone_delete'] = { resource = 'nexus_territories', label = 'Eliminar una zona dinamica de territorio' },
         ['nexus_territories.graffiti_admin'] = { resource = 'nexus_territories', label = 'Limpiar graffiti como admin' },
         ['nexus_territories.influence_grant'] = { resource = 'nexus_territories', label = 'Otorgar influencia de banda manualmente' },
         ['nexus_territories.airdrop_admin'] = { resource = 'nexus_territories', label = 'Lanzar airdrops fuera de las condiciones normales' },

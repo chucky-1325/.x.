@@ -32,8 +32,52 @@ local function getPedCoords(source)
     return GetEntityCoords(ped)
 end
 
-local function isAdmin(source)
-    return source == 0 or IsPlayerAceAllowed(source, NexusTerritoriesConfig.adminAce or 'admin')
+local function hasEditorViewBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_territories.editor_view')
+end
+
+local function hasZoneSaveBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_territories.zone_save')
+end
+
+local function hasZoneDeleteBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_territories.zone_delete')
+end
+
+local function hasGraffitiAdminBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_territories.graffiti_admin')
+end
+
+local function hasInfluenceGrantBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_territories.influence_grant')
+end
+
+local function hasAirdropAdminBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_territories.airdrop_admin')
 end
 
 local function getGangName(source)
@@ -473,7 +517,7 @@ lib.callback.register('nexus_territories:server:getAirdrop', function(source)
 end)
 
 lib.callback.register('nexus_territories:server:getEditorZones', function(source)
-    if not isAdmin(source) then return false, 'no_access' end
+    if not hasEditorViewBypass(source) then return false, 'no_access' end
     return true, buildEditorZones()
 end)
 
@@ -487,7 +531,7 @@ end)
 
 RegisterNetEvent('nexus_territories:server:saveZone', function(data)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso para editar territorios.', 'error') end
+    if not hasZoneSaveBypass(src) then return notify(src, 'No tienes permiso para editar territorios.', 'error') end
 
     local zone, reason = sanitizeZonePayload(src, data)
     if not zone then return notify(src, ('Zona invalida: %s'):format(reason), 'error') end
@@ -501,7 +545,7 @@ end)
 
 RegisterNetEvent('nexus_territories:server:deleteZone', function(zoneId)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso para editar territorios.', 'error') end
+    if not hasZoneDeleteBypass(src) then return notify(src, 'No tienes permiso para editar territorios.', 'error') end
 
     zoneId = tostring(zoneId or '')
     if not dynamicZones[zoneId] then return notify(src, 'Solo puedes eliminar territorios dinamicos.', 'error') end
@@ -619,7 +663,7 @@ end)
 
 RegisterNetEvent('nexus_territories:server:adminRemoveGraffiti', function(graffitiId)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso para limpiar graffiti admin.', 'error') end
+    if not hasGraffitiAdminBypass(src) then return notify(src, 'No tienes permiso para limpiar graffiti admin.', 'error') end
 
     graffitiId = tonumber(graffitiId)
     if not graffitiId then return end
@@ -647,7 +691,7 @@ end)
 
 RegisterNetEvent('nexus_territories:server:adminAddNearbyInfluence', function(amount)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso para dar influencia.', 'error') end
+    if not hasInfluenceGrantBypass(src) then return notify(src, 'No tienes permiso para dar influencia.', 'error') end
 
     local coords = getPedCoords(src)
     if not coords then return notify(src, 'No se pudo leer tu posicion.', 'error') end
@@ -674,7 +718,7 @@ end)
 
 RegisterNetEvent('nexus_territories:server:adminAddZoneInfluence', function(zoneId, amount)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso para dar influencia.', 'error') end
+    if not hasInfluenceGrantBypass(src) then return notify(src, 'No tienes permiso para dar influencia.', 'error') end
 
     zoneId = tostring(zoneId or ''):lower():gsub('[^%w_%-]', '')
     if zoneId == '' then return notify(src, 'Territorio invalido.', 'error') end
@@ -762,14 +806,14 @@ end, false)
 
 RegisterCommand(NexusTerritoriesConfig.editorCommand, function(source)
     if source == 0 then return end
-    if not isAdmin(source) then return notify(source, 'No tienes permiso para editar territorios.', 'error') end
+    if not hasEditorViewBypass(source) then return notify(source, 'No tienes permiso para editar territorios.', 'error') end
 
     TriggerClientEvent('nexus_territories:client:openEditor', source)
 end, false)
 
 RegisterCommand(NexusTerritoriesConfig.airdrop.command or 'territoryairdrop', function(source, args)
     local config = NexusTerritoriesConfig.airdrop or {}
-    if config.adminOnly and not isAdmin(source) then return notify(source, 'No tienes permiso para lanzar airdrops.', 'error') end
+    if config.adminOnly and not hasAirdropAdminBypass(source) then return notify(source, 'No tienes permiso para lanzar airdrops.', 'error') end
 
     local ok, result = startAirdrop(source, args and args[1] or nil)
     if not ok then
