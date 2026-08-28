@@ -22,19 +22,36 @@ function NexusEMS.GetPlayer(source)
     return exports.qbx_core:GetPlayer(source)
 end
 
-function NexusEMS.IsAdmin(source)
+-- Dos permisos separados -- nunca combinados en uno de "acceso". El
+-- override de grado (usado en PrepareAction, linea ~203) es una accion
+-- distinta al bypass de acceso a medico de aqui.
+function NexusEMS.HasMedicAccessBypass(source)
     source = tonumber(source)
-    return source == 0 or (source and IsPlayerAceAllowed(source, NexusEMSConfig.adminAce or 'admin')) or false
+    if source == 0 then return true end
+    if not source or GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_ems.medic_access_bypass')
+end
+
+function NexusEMS.HasGradeOverride(source)
+    source = tonumber(source)
+    if source == 0 then return true end
+    if not source or GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_ems.grade_override')
 end
 
 function NexusEMS.IsMedic(source)
     source = tonumber(source)
     if not source then return false end
-    if NexusEMS.IsAdmin(source) then return true end
+    if NexusEMS.HasMedicAccessBypass(source) then return true end
 
     local player = NexusEMS.GetPlayer(source)
     local job = player and player.PlayerData and player.PlayerData.job or {}
-    local grade = NexusEMS.IsAdmin(source) and 99 or NexusEMSUtils.gradeLevel(job)
+    -- NOTA (documentado, sin tocar la logica en esta fase): esta linea es
+    -- codigo muerto -- si HasMedicAccessBypass(source) es true, la funcion
+    -- ya retorno en la linea anterior, asi que aqui SIEMPRE cae en el "or"
+    -- (gradeLevel(job)), nunca en el 99. El override de grado que si es
+    -- alcanzable esta en PrepareAction, via NexusEMS.HasGradeOverride.
+    local grade = NexusEMS.HasMedicAccessBypass(source) and 99 or NexusEMSUtils.gradeLevel(job)
     if NexusEMSJobs.jobTypes[job.type] then return true end
     return NexusEMSJobs.jobs[job.name] ~= nil and grade >= NexusEMSJobs.jobs[job.name]
 end
@@ -200,7 +217,7 @@ function NexusEMS.PrepareAction(source, target, actionId)
     if not state or not actionAllowed(actionId, state) then return false, 'not_indicated' end
 
     local medic = NexusEMS.GetPlayer(source)
-    local grade = NexusEMS.IsAdmin(source) and 99 or NexusEMSUtils.gradeLevel(medic.PlayerData.job)
+    local grade = NexusEMS.HasGradeOverride(source) and 99 or NexusEMSUtils.gradeLevel(medic.PlayerData.job)
     if grade < (tonumber(action.minGrade) or 0) then return false, 'grade' end
 
     local selectedItem, hasRequired = findItem(source, action)
