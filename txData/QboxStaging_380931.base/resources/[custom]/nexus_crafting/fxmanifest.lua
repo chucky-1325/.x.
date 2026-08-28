@@ -34,5 +34,4 @@ dependencies {
     'oxmysql',
     'qbx_core',
     'ox_inventory',
-    'nexus_scene_core',
 }
