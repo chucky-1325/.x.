@@ -29,6 +29,20 @@ Thumbs.db
 !/txData/QboxStaging_380931.base/resources/\[custom\]/nexus_*/
 !/txData/QboxStaging_380931.base/resources/\[custom\]/nexus_*/**
 
+# --- Explicit, file-level exceptions for the nexus_permissions pilot.
+# Only these two files -- not the rest of qbx_mdt/handling_lab (vendor code,
+# runtime data, other resource content stays out). Each ancestor directory
+# needs its own re-include for git to descend into an otherwise-ignored tree. ---
+!/txData/QboxStaging_380931.base/resources/\[custom\]/qbx_mdt/
+/txData/QboxStaging_380931.base/resources/\[custom\]/qbx_mdt/*
+!/txData/QboxStaging_380931.base/resources/\[custom\]/qbx_mdt/server/
+/txData/QboxStaging_380931.base/resources/\[custom\]/qbx_mdt/server/*
+!/txData/QboxStaging_380931.base/resources/\[custom\]/qbx_mdt/server/main.lua
+
+!/txData/QboxStaging_380931.base/resources/\[custom\]/handling_lab/
+/txData/QboxStaging_380931.base/resources/\[custom\]/handling_lab/*
+!/txData/QboxStaging_380931.base/resources/\[custom\]/handling_lab/server.lua
+
 # --- Belt-and-suspenders: never allow these even if scope changes later ---
 *.sql
 *.key
