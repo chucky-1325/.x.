@@ -247,8 +247,22 @@ local function refreshClients()
     TriggerClientEvent('nexus_crafting:client:refreshWorkbenches', -1, getStationSummaries())
 end
 
-local function isEditorAllowed(source)
-    return source == 0 or IsPlayerAceAllowed(source, NexusCraftingConfig.editor.ace)
+-- Dos permisos separados -- ver/listar el editor (solo lectura, incluye
+-- abrir una mesa desactivada para inspeccionarla, nunca craftear ahi) vs
+-- mutar mesas (crear/guardar/mover/activar/eliminar). Ver
+-- nexus_permissions/config.lua PermissionCatalog para el detalle.
+local function hasEditorViewPermission(source)
+    source = tonumber(source)
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_crafting.editor_view')
+end
+
+local function hasEditorMutatePermission(source)
+    source = tonumber(source)
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_crafting.editor_mutate')
 end
 
 local function sanitizeWorkbenchPayload(source, data)
@@ -658,7 +672,7 @@ lib.callback.register('nexus_crafting:server:getStation', function(source, stati
     if station.mode == 'mechanic' and not verticalSliceRuntimeReady then
         return false, verticalSliceRuntimeReason or 'schema_not_ready'
     end
-    if station.enabled == false and not isEditorAllowed(source) then return false, 'station_disabled' end
+    if station.enabled == false and not hasEditorViewPermission(source) then return false, 'station_disabled' end
     if not hasStationAccess(source, station) then return false, 'no_access' end
     if station.mode == 'mechanic' and not isNearStation(source, station) then return false, 'too_far' end
 
@@ -772,7 +786,7 @@ lib.callback.register('nexus_crafting:server:getStations', function(source)
 end)
 
 lib.callback.register('nexus_crafting:server:editorList', function(source)
-    if not isEditorAllowed(source) then return false, 'no_access' end
+    if not hasEditorViewPermission(source) then return false, 'no_access' end
 
     return true, {
         stations = getStationSummaries(),
@@ -988,7 +1002,7 @@ end)
 
 RegisterNetEvent('nexus_crafting:server:saveWorkbench', function(data)
     local src = source
-    if not isEditorAllowed(src) then return notify(src, 'No tienes permiso para editar mesas.', 'error') end
+    if not hasEditorMutatePermission(src) then return notify(src, 'No tienes permiso para editar mesas.', 'error') end
     if GetResourceState('nexus_bridge') == 'started' and not exports.nexus_bridge:rateLimit(src, 'admin') then return end
 
     local bench, reason = sanitizeWorkbenchPayload(src, data)
@@ -1018,7 +1032,7 @@ end)
 
 RegisterNetEvent('nexus_crafting:server:deleteWorkbench', function(stationId)
     local src = source
-    if not isEditorAllowed(src) then return notify(src, 'No tienes permiso para editar mesas.', 'error') end
+    if not hasEditorMutatePermission(src) then return notify(src, 'No tienes permiso para editar mesas.', 'error') end
     if type(stationId) ~= 'string' or not runtimeStations[stationId] then
         return notify(src, 'Solo se pueden eliminar mesas dinamicas.', 'error')
     end
