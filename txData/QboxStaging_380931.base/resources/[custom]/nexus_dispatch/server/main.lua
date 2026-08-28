@@ -50,7 +50,10 @@ local function isPolice(source)
 end
 
 local function isAdmin(source)
-    return IsPlayerAceAllowed(source, NexusDispatchConfig.adminAce or 'admin')
+    source = tonumber(source)
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_dispatch.admin_access')
 end
 
 local function hasAccess(source)

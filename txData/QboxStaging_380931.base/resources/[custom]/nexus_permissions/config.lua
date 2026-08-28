@@ -6,15 +6,20 @@ NexusPermissionsConfig = {
     -- clave es el string exacto que los recursos consumidores pasaran a
     -- hasPermission/hasAnyPermission. Solo los permisos listados aqui pueden
     -- devolver true -- cualquier otro string falla cerrado, aunque algun rol
-    -- lo tenga otorgado en nexus_permission_role_grants. Solo qbx_mdt.admin_access
-    -- y handling_lab.use tienen ya un gate real consumiendolos (piloto); el
-    -- resto queda definido para las fases siguientes del roadmap, sin ningun
-    -- gate ACE migrado todavia.
+    -- lo tenga otorgado en nexus_permission_role_grants. qbx_mdt.admin_access,
+    -- handling_lab.use, nexus_dispatch.admin_access y los dos nexus_tablet.*
+    -- de abajo ya tienen gate real consumiendolos (Fase 2); el resto queda
+    -- definido para las fases siguientes del roadmap, sin gate ACE migrado.
+    --
+    -- nexus_tablet: dos bypasses administrativos distintos en el codigo
+    -- (acceso ilegal vs restriccion general de apps) -- permisos separados
+    -- a proposito, uno por bypass real, no un unico "admin_access" generico.
     PermissionCatalog = {
         ['qbx_mdt.admin_access'] = { resource = 'qbx_mdt', label = 'Acceso administrativo a MDT sin ser policia' },
         ['handling_lab.use'] = { resource = 'handling_lab', label = 'Usar los comandos del laboratorio de handling' },
         ['nexus_dispatch.admin_access'] = { resource = 'nexus_dispatch', label = 'Acceso administrativo a dispatch sin ser policia' },
-        ['nexus_tablet.admin_access'] = { resource = 'nexus_tablet', label = 'Bypass de acceso ilegal y restriccion de apps en el tablet' },
+        ['nexus_tablet.bypass_illegal_access'] = { resource = 'nexus_tablet', label = 'Bypass de requisitos de banda/reputacion para acceso ilegal en el tablet' },
+        ['nexus_tablet.bypass_app_restriction'] = { resource = 'nexus_tablet', label = 'Bypass de restriccion de acceso a cualquier app del tablet' },
         ['nexus_crafting.editor_manage'] = { resource = 'nexus_crafting', label = 'Crear, editar y eliminar mesas de crafting' },
         ['nexus_contracts.quarantine_admin'] = { resource = 'nexus_contracts', label = 'Listar y recuperar cuarentenas de craft y lot-incidents' },
         ['nexus_blackmarket.admin_access'] = { resource = 'nexus_blackmarket', label = 'Acceso administrativo al mercado negro' },

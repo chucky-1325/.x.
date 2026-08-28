@@ -10,10 +10,22 @@ local function getCitizenId(source)
     return player and player.PlayerData and player.PlayerData.citizenid or nil
 end
 
-local function isAdmin(source)
+-- Dos bypasses administrativos distintos -- permisos separados, no un unico
+-- "isAdmin" generico (ver nexus_permissions/config.lua PermissionCatalog).
+local function hasIllegalAccessBypass(source)
     source = tonumber(source)
     if not source then return false end
-    return source == 0 or IsPlayerAceAllowed(source, NexusTabletConfig.adminAce or 'admin')
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_tablet.bypass_illegal_access')
+end
+
+local function hasAppRestrictionBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_tablet.bypass_app_restriction')
 end
 
 local function rateLimit(source)
@@ -49,7 +61,7 @@ local function getGang(source)
 end
 
 local function hasIllegalAccess(source)
-    if isAdmin(source) then return true end
+    if hasIllegalAccessBypass(source) then return true end
 
     local gang = getGang(source)
     if gang and gang.name and gang.name ~= 'none' then return true end
@@ -118,7 +130,7 @@ local function canOpen(source, appId)
     local app = NexusTabletApps[appId or NexusTabletConfig.defaultApp]
     if not app then return false, 'invalid_app' end
     if not app.access then return true, app end
-    if isAdmin(source) then return true, app end
+    if hasAppRestrictionBypass(source) then return true, app end
 
     if not rateLimit(source) then return false, 'rate_limited' end
     if app.access == 'illegal' then
