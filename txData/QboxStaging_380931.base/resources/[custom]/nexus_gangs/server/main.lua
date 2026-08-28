@@ -14,10 +14,40 @@ local function notify(source, description, notifyType)
     })
 end
 
-local function isAdmin(source)
+-- NOTA: estos 4 bypasses son el gate GLOBAL de administrador migrado a
+-- nexus_permissions. El sistema interno de permisos por rango de banda
+-- (funcion hasPermission mas abajo, basada en rank.isBoss/rank.permissions)
+-- es un mecanismo totalmente distinto y no se toca aqui.
+local function hasGangCreateBypass(source)
     source = tonumber(source)
     if not source then return false end
-    return source == 0 or IsPlayerAceAllowed(source, NexusGangsConfig.adminAce or 'admin')
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_gangs.gang_create')
+end
+
+local function hasMemberManageOverride(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_gangs.member_manage_override')
+end
+
+local function hasGangMemberAdminBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_gangs.gang_member_admin')
+end
+
+local function hasReputationGrantBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_gangs.reputation_grant')
 end
 
 local function rateLimit(source)
@@ -63,7 +93,7 @@ local function getMemberBySource(source)
 end
 
 local function hasPermission(source, permission)
-    if isAdmin(source) then return true end
+    if hasMemberManageOverride(source) then return true end
 
     local member = getMemberBySource(source)
     if not member then return false end
@@ -254,11 +284,11 @@ local function canManageTarget(actorSource, targetSource, permission)
     if actor.gang_name ~= target.gang_name then return false, 'different_gang' end
     if actorSource == targetSource then return false, 'self_target' end
 
-    if not isAdmin(actorSource) and not hasPermission(actorSource, permission) then return false, 'no_permission' end
+    if not hasMemberManageOverride(actorSource) and not hasPermission(actorSource, permission) then return false, 'no_permission' end
 
     local actorRank = tonumber(actor.rank_level) or 0
     local targetRank = tonumber(target.rank_level) or 0
-    if not isAdmin(actorSource) and targetRank >= actorRank then return false, 'rank_too_high' end
+    if not hasMemberManageOverride(actorSource) and targetRank >= actorRank then return false, 'rank_too_high' end
 
     return true, actor, target
 end
@@ -396,7 +426,7 @@ end)
 
 RegisterNetEvent('nexus_gangs:server:adminAddGangReputation', function(amount)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso para reputacion de banda.', 'error') end
+    if not hasReputationGrantBypass(src) then return notify(src, 'No tienes permiso para reputacion de banda.', 'error') end
 
     local member = getMemberBySource(src)
     if not member then return notify(src, 'No perteneces a una banda NEXUS.', 'error') end
@@ -595,7 +625,7 @@ RegisterNetEvent('nexus_gangs:server:setMemberRank', function(targetId, rankLeve
 
     local actor = actorOrReason
     local actorRank = tonumber(actor.rank_level) or 0
-    local maxRank = isAdmin(src) and 99 or (actorRank - 1)
+    local maxRank = hasMemberManageOverride(src) and 99 or (actorRank - 1)
     newRank = math.floor(math.max(0, math.min(newRank, maxRank)))
 
     local result, reason = setMember(src, target, actor.gang_name, newRank, 'set_rank')
@@ -681,7 +711,7 @@ RegisterCommand('gangaccept', function(source)
 end, false)
 
 RegisterCommand('gangcreate', function(source, args)
-    if not isAdmin(source) then return notify(source, 'No tienes permiso.', 'error') end
+    if not hasGangCreateBypass(source) then return notify(source, 'No tienes permiso.', 'error') end
 
     local ok, result = createGang(source, args[1], args[2], args[3], args[4])
     if not ok then return notify(source, ('No se pudo crear banda: %s'):format(result), 'error') end
@@ -689,7 +719,7 @@ RegisterCommand('gangcreate', function(source, args)
 end, false)
 
 RegisterCommand('gangadd', function(source, args)
-    if not isAdmin(source) then return notify(source, 'No tienes permiso.', 'error') end
+    if not hasGangMemberAdminBypass(source) then return notify(source, 'No tienes permiso.', 'error') end
 
     local target = tonumber(args[1])
     local gangName = sanitizeName(args[2])
@@ -702,7 +732,7 @@ RegisterCommand('gangadd', function(source, args)
 end, false)
 
 RegisterCommand('gangremove', function(source, args)
-    if not isAdmin(source) then return notify(source, 'No tienes permiso.', 'error') end
+    if not hasGangMemberAdminBypass(source) then return notify(source, 'No tienes permiso.', 'error') end
 
     local target = tonumber(args[1])
     if not target then return notify(source, 'Uso: /gangremove id', 'error') end

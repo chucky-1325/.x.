@@ -1,6 +1,10 @@
 NexusGangsConfig = {
     debug = false,
     command = 'gangs',
+    -- adminAce ya no se usa -- el bypass global de administrador ahora lo
+    -- decide nexus_permissions (nexus_gangs.gang_create/member_manage_override/
+    -- gang_member_admin/reputation_grant). El sistema interno de permisos por
+    -- rango de banda (rank.isBoss/rank.permissions) es independiente de esto.
     adminAce = 'admin',
     rateLimitBucket = 'default',
 

@@ -54,6 +54,19 @@ NexusPermissionsConfig = {
     -- sustituto). admin_access cubre tanto el flag admin de getAccess como
     -- sus 3 bypasses internos (police/ems/illegal) y el panel de
     -- diagnostico getIllegalValidationStatus -- ninguno muta datos.
+    --
+    -- Fase 6b: nexus_gangs.admin_manage (generico) se separa en 4 nodos.
+    -- IMPORTANTE: nexus_gangs tiene su propio sistema interno de permisos
+    -- por rango de banda (rank.isBoss / rank.permissions), que NO se toca
+    -- -- estos 4 permisos solo cubren el bypass GLOBAL de administrador
+    -- sobre ese sistema, no lo reemplazan. member_manage_override cubre
+    -- tanto el bypass del permiso interno como el del tope de rango dentro
+    -- de canManageTarget (setRank/kick via menu, misma banda) -- son el
+    -- mismo bypass real aplicado a dos checks del mismo flujo. Separado de
+    -- gang_member_admin (gangadd/gangremove: comandos de consola sin
+    -- restriccion de banda propia, mismo tipo de accion pero otro camino
+    -- de invocacion, elegido explicitamente separado). gang_create es
+    -- crear una entidad nueva, distinto de gestionar membresia existente.
     PermissionCatalog = {
         ['qbx_mdt.admin_access'] = { resource = 'qbx_mdt', label = 'Acceso administrativo a MDT sin ser policia' },
         ['handling_lab.use'] = { resource = 'handling_lab', label = 'Usar los comandos del laboratorio de handling' },
@@ -78,7 +91,10 @@ NexusPermissionsConfig = {
         ['nexus_territories.graffiti_admin'] = { resource = 'nexus_territories', label = 'Limpiar graffiti como admin' },
         ['nexus_territories.influence_grant'] = { resource = 'nexus_territories', label = 'Otorgar influencia de banda manualmente' },
         ['nexus_territories.airdrop_admin'] = { resource = 'nexus_territories', label = 'Lanzar airdrops fuera de las condiciones normales' },
-        ['nexus_gangs.admin_manage'] = { resource = 'nexus_gangs', label = 'Crear/asignar/quitar miembros de banda via comandos' },
+        ['nexus_gangs.gang_create'] = { resource = 'nexus_gangs', label = 'Crear una banda nueva' },
+        ['nexus_gangs.member_manage_override'] = { resource = 'nexus_gangs', label = 'Bypass del permiso interno de banda y del tope de rango para ascender/expulsar miembros' },
+        ['nexus_gangs.gang_member_admin'] = { resource = 'nexus_gangs', label = 'Asignar o quitar a cualquier jugador de cualquier banda via comandos de consola' },
+        ['nexus_gangs.reputation_grant'] = { resource = 'nexus_gangs', label = 'Modificar reputacion de banda manualmente' },
         ['nexus_menu.admin_access'] = { resource = 'nexus_menu', label = 'Acceso al panel admin del menu' },
         ['nexus_menu.give_kit'] = { resource = 'nexus_menu', label = 'Entregar kits administrativos de items' },
         ['nexus_menu.grant_progression'] = { resource = 'nexus_menu', label = 'Otorgar XP/reputacion de progresion manualmente' },
