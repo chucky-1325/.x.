@@ -24,6 +24,5 @@ client_scripts {
 }
 
 dependencies {
-    'nexus_bridge',
     'ox_inventory',
 }
