@@ -26,6 +26,17 @@ NexusPermissionsConfig = {
     -- listados) mas DOS permisos de mutacion independientes -- uno por tipo
     -- de recuperacion (craft_quarantine_recover / lot_incident_recover) --
     -- para poder delegar cada uno por separado en el futuro sin acoplarlos.
+    --
+    -- Fase 4: nexus_blackmarket, nexus_ems, nexus_labs -- cada bypass real
+    -- separado (no un unico admin_access por recurso). nexus_labs.canUseLab
+    -- bypasseaba 4 requisitos distintos con un solo booleano -- se separaron
+    -- en progression_bypass (rango + reputacion) y territory_bypass (zona
+    -- rival + influencia), ademas de sabotage_bypass, ya de por si distinto.
+    -- nexus_ems.grade_override queda deliberadamente separado de
+    -- medic_access_bypass -- nunca se combinan en un solo permiso de acceso.
+    -- El backdoor NexusBlackmarketConfig.adminIdentifiers se retiro en esta
+    -- migracion: quien necesite ese acceso ahora recibe un rol explicito de
+    -- nexus_permissions, sin ningun identifier hardcodeado sustituto.
     PermissionCatalog = {
         ['qbx_mdt.admin_access'] = { resource = 'qbx_mdt', label = 'Acceso administrativo a MDT sin ser policia' },
         ['handling_lab.use'] = { resource = 'handling_lab', label = 'Usar los comandos del laboratorio de handling' },
@@ -37,9 +48,13 @@ NexusPermissionsConfig = {
         ['nexus_contracts.quarantine_view'] = { resource = 'nexus_contracts', label = 'Listar cuarentenas de craft y lot-incidents (solo lectura)' },
         ['nexus_contracts.craft_quarantine_recover'] = { resource = 'nexus_contracts', label = 'Ejecutar la recuperacion de una cuarentena de craft' },
         ['nexus_contracts.lot_incident_recover'] = { resource = 'nexus_contracts', label = 'Ejecutar la recuperacion de un lot-incident' },
-        ['nexus_blackmarket.admin_access'] = { resource = 'nexus_blackmarket', label = 'Acceso administrativo al mercado negro' },
-        ['nexus_ems.admin_access'] = { resource = 'nexus_ems', label = 'Acceso administrativo EMS (grado elevado)' },
-        ['nexus_labs.admin_access'] = { resource = 'nexus_labs', label = 'Bypass de rango/reputacion para labs y sabotaje' },
+        ['nexus_blackmarket.access_bypass'] = { resource = 'nexus_blackmarket', label = 'Acceso al mercado y a una ubicacion sin banda/reputacion' },
+        ['nexus_blackmarket.distance_bypass'] = { resource = 'nexus_blackmarket', label = 'Bypass de requisito de distancia a una ubicacion' },
+        ['nexus_ems.medic_access_bypass'] = { resource = 'nexus_ems', label = 'Tratar a un admin como medico valido sin serlo' },
+        ['nexus_ems.grade_override'] = { resource = 'nexus_ems', label = 'Override de grado a 99 para el minGrade de una accion medica' },
+        ['nexus_labs.progression_bypass'] = { resource = 'nexus_labs', label = 'Bypass de rango de banda y reputacion criminal para usar un lab' },
+        ['nexus_labs.territory_bypass'] = { resource = 'nexus_labs', label = 'Bypass de bloqueo por zona rival y minimo de influencia para usar un lab' },
+        ['nexus_labs.sabotage_bypass'] = { resource = 'nexus_labs', label = 'Bypass de reputacion criminal para sabotear (el rango de banda nunca tiene bypass)' },
         ['nexus_territories.editor_manage'] = { resource = 'nexus_territories', label = 'Ver, guardar y eliminar zonas de territorio' },
         ['nexus_territories.graffiti_admin'] = { resource = 'nexus_territories', label = 'Limpiar graffiti como admin' },
         ['nexus_territories.influence_grant'] = { resource = 'nexus_territories', label = 'Otorgar influencia de banda manualmente' },

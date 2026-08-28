@@ -13,19 +13,24 @@ local function getCitizenId(source)
     return player and player.PlayerData and player.PlayerData.citizenid or nil
 end
 
-local function isAdmin(source)
+-- El backdoor de identifiers hardcodeados (NexusBlackmarketConfig.adminIdentifiers)
+-- se retiro en esta migracion -- no se sustituye por ningun identifier
+-- hardcodeado nuevo. Quien necesite estos privilegios recibe un rol
+-- explicito de nexus_permissions (grantrole).
+local function hasAccessBypass(source)
     source = tonumber(source)
     if not source then return false end
     if source == 0 then return true end
-    if IsPlayerAceAllowed(source, NexusBlackmarketConfig.adminAce or 'admin') then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_blackmarket.access_bypass')
+end
 
-    local allowedIdentifiers = NexusBlackmarketConfig.adminIdentifiers or {}
-    for i = 0, GetNumPlayerIdentifiers(source) - 1 do
-        local identifier = GetPlayerIdentifier(source, i)
-        if identifier and allowedIdentifiers[identifier] then return true end
-    end
-
-    return false
+local function hasDistanceBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_blackmarket.distance_bypass')
 end
 
 local function notify(source, description, notifyType)
@@ -66,7 +71,7 @@ local function getCriminalReputation(progress)
 end
 
 local function hasMarketAccess(source, progress)
-    if isAdmin(source) then return true end
+    if hasAccessBypass(source) then return true end
     if not NexusBlackmarketConfig.access.requireGangOrCriminalRep then return true end
 
     local gangName = getGangName(source)
@@ -76,7 +81,7 @@ local function hasMarketAccess(source, progress)
 end
 
 local function hasLocationAccess(source, locationId, progress)
-    if isAdmin(source) then return true end
+    if hasAccessBypass(source) then return true end
 
     local location = NexusBlackmarketConfig.locations[locationId]
     if not location then return false end
@@ -91,7 +96,7 @@ local function isNearLocation(source, locationId)
     local location = NexusBlackmarketConfig.locations[locationId]
     if not location then return false end
 
-    if isAdmin(source) then return true end
+    if hasDistanceBypass(source) then return true end
 
     local ped = GetPlayerPed(source)
     if not ped or ped == 0 then return false end

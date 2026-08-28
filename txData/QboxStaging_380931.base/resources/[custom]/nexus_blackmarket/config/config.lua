@@ -2,10 +2,10 @@ NexusBlackmarketConfig = {
     debug = false,
     command = 'blackmarket',
     nearestCommand = 'blackmarketnear',
+    -- adminAce ya no se usa -- el acceso admin ahora lo decide nexus_permissions
+    -- (nexus_blackmarket.access_bypass / distance_bypass). El backdoor de
+    -- identifiers hardcodeados que existia aqui fue retirado, sin sustituto.
     adminAce = 'admin',
-    adminIdentifiers = {
-        ['fivem:11477662'] = true,
-    },
     rateLimitBucket = 'default',
     heat = {
         enabled = true,
