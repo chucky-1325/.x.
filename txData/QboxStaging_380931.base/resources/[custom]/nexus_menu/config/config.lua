@@ -3,10 +3,11 @@ NexusMenuConfig = {
     key = 'F5',
 
     admin = {
+        -- ace ya no se usa -- el acceso admin ahora lo decide nexus_permissions
+        -- (nexus_menu.admin_access / give_kit / grant_progression). El backdoor
+        -- de identifiers hardcodeados que existia aqui fue retirado, sin
+        -- sustituto.
         ace = 'admin',
-        identifiers = {
-            ['fivem:11477662'] = true,
-        },
         kits = {
             crafting_materials = {
                 label = 'Materiales crafting',

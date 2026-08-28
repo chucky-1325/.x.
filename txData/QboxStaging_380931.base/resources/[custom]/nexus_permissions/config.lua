@@ -46,6 +46,14 @@ NexusPermissionsConfig = {
     -- influencia) que guardarla/crearla. graffiti_admin, influence_grant y
     -- airdrop_admin ya mapeaban 1:1 a una accion real desde la semilla de
     -- Fase 0 -- mantienen su nombre, solo dejan de ser placeholders.
+    --
+    -- Fase 6a: nexus_menu.admin_access/give_kit/grant_progression ya
+    -- existian con su nombre final desde la semilla de Fase 0 -- ningun
+    -- nodo nuevo, solo dejan de ser placeholders. Se retira el backdoor
+    -- de identifier hardcodeado (mismo fivem:11477662 que blackmarket, sin
+    -- sustituto). admin_access cubre tanto el flag admin de getAccess como
+    -- sus 3 bypasses internos (police/ems/illegal) y el panel de
+    -- diagnostico getIllegalValidationStatus -- ninguno muta datos.
     PermissionCatalog = {
         ['qbx_mdt.admin_access'] = { resource = 'qbx_mdt', label = 'Acceso administrativo a MDT sin ser policia' },
         ['handling_lab.use'] = { resource = 'handling_lab', label = 'Usar los comandos del laboratorio de handling' },

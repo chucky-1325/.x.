@@ -1,14 +1,25 @@
-local function isAdmin(source)
+local function hasAdminAccessBypass(source)
+    source = tonumber(source)
+    if not source then return false end
     if source == 0 then return true end
-    if IsPlayerAceAllowed(source, NexusMenuConfig.admin.ace or 'admin') then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_menu.admin_access')
+end
 
-    local allowedIdentifiers = NexusMenuConfig.admin.identifiers or {}
-    for i = 0, GetNumPlayerIdentifiers(source) - 1 do
-        local identifier = GetPlayerIdentifier(source, i)
-        if identifier and allowedIdentifiers[identifier] then return true end
-    end
+local function hasGiveKitBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_menu.give_kit')
+end
 
-    return false
+local function hasGrantProgressionBypass(source)
+    source = tonumber(source)
+    if not source then return false end
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_menu.grant_progression')
 end
 
 local function notify(source, description, notifyType)
@@ -52,12 +63,12 @@ local function hasGang(data)
 end
 
 lib.callback.register('nexus_menu:server:isAdmin', function(source)
-    return isAdmin(source)
+    return hasAdminAccessBypass(source)
 end)
 
 lib.callback.register('nexus_menu:server:getAccess', function(source)
     local data = getPlayerData(source)
-    local admin = isAdmin(source)
+    local admin = hasAdminAccessBypass(source)
     local job = data and data.job or {}
     local gang = data and data.gang or {}
     local police = admin or isPolice(data)
@@ -84,7 +95,7 @@ end)
 
 RegisterNetEvent('nexus_menu:server:giveAdminKit', function(kitId)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso.', 'error') end
+    if not hasGiveKitBypass(src) then return notify(src, 'No tienes permiso.', 'error') end
     if GetResourceState('ox_inventory') ~= 'started' then return notify(src, 'ox_inventory no iniciado.', 'error') end
 
     local kit = NexusMenuConfig.admin.kits[tostring(kitId or '')]
@@ -103,7 +114,7 @@ end)
 
 RegisterNetEvent('nexus_menu:server:addCraftingProgress', function(xp, reputation)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso.', 'error') end
+    if not hasGrantProgressionBypass(src) then return notify(src, 'No tienes permiso.', 'error') end
     if GetResourceState('nexus_progression') ~= 'started' then return notify(src, 'nexus_progression no iniciado.', 'error') end
 
     local citizenid = getCitizenId(src)
@@ -118,7 +129,7 @@ end)
 
 RegisterNetEvent('nexus_menu:server:addDomainProgress', function(domain, xp, reputation)
     local src = source
-    if not isAdmin(src) then return notify(src, 'No tienes permiso.', 'error') end
+    if not hasGrantProgressionBypass(src) then return notify(src, 'No tienes permiso.', 'error') end
     if GetResourceState('nexus_progression') ~= 'started' then return notify(src, 'nexus_progression no iniciado.', 'error') end
 
     local cleanDomain = tostring(domain or '')
@@ -138,7 +149,7 @@ RegisterNetEvent('nexus_menu:server:addDomainProgress', function(domain, xp, rep
 end)
 
 lib.callback.register('nexus_menu:server:getIllegalValidationStatus', function(source)
-    if not isAdmin(source) then
+    if not hasAdminAccessBypass(source) then
         return false, 'forbidden'
     end
 
