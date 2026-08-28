@@ -4,6 +4,22 @@ NexusEMSConfig = {
     maxPatientDistance = 3.0,
     actionExpiryGraceMs = 65000,
     hospital = vector3(307.17, -590.81, 43.28),
+    rateLimitBucket = 'default',
+
+    -- Usado solo por server/security_fallback.lua cuando nexus_bridge no esta
+    -- corriendo. Valores en paridad con nexus_bridge/config/config.lua para que
+    -- el fallback y el modulo compartido se comporten igual.
+    security = {
+        rateLimits = {
+            default = { window = 10000, limit = 8 },
+        },
+        timedActions = {
+            minimumDuration = 500,
+            maximumDuration = 120000,
+            graceMs = 60000,
+            earlyToleranceMs = 250,
+        },
+    },
 
     scenes = {
         enabled = true,

@@ -3,12 +3,12 @@ lib.callback.register('nexus_ems:server:canUse', function(source)
 end)
 
 lib.callback.register('nexus_ems:server:prepareAction', function(source, target, actionId)
-    if not exports.nexus_bridge:rateLimit(source, 'default') then return false, 'rate_limited' end
+    if not NexusEMS.RateLimit(source) then return false, 'rate_limited' end
     return NexusEMS.PrepareAction(source, target, actionId)
 end)
 
 lib.callback.register('nexus_ems:server:finishAction', function(source, actionToken)
-    if not exports.nexus_bridge:rateLimit(source, 'default') then return false, 'rate_limited' end
+    if not NexusEMS.RateLimit(source) then return false, 'rate_limited' end
     return NexusEMS.FinishAction(source, actionToken)
 end)
 

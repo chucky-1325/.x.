@@ -8,6 +8,41 @@ local function nowMs()
     return GetGameTimer()
 end
 
+local function nexusBridgeAvailable()
+    return GetResourceState('nexus_bridge') == 'started'
+end
+
+local function beginPhysicalAction(source, scope, subject, duration)
+    if nexusBridgeAvailable() then
+        return exports.nexus_bridge:beginTimedAction(source, scope, subject, duration)
+    end
+    return NexusEMSSecurityFallback.beginTimedAction(source, scope, subject, duration)
+end
+
+local function consumePhysicalAction(source, scope, subject, token)
+    if nexusBridgeAvailable() then
+        return exports.nexus_bridge:consumeTimedAction(source, scope, subject, token)
+    end
+    return NexusEMSSecurityFallback.consumeTimedAction(source, scope, subject, token)
+end
+
+local function cancelPhysicalAction(source, scope, token)
+    if nexusBridgeAvailable() then
+        return exports.nexus_bridge:cancelTimedAction(source, scope, token)
+    end
+    return NexusEMSSecurityFallback.cancelTimedAction(source, scope, token)
+end
+
+function NexusEMS.RateLimit(source)
+    source = tonumber(source)
+    if not source or source <= 0 then return false end
+    local bucket = NexusEMSConfig.rateLimitBucket or 'default'
+    if nexusBridgeAvailable() then
+        return exports.nexus_bridge:rateLimit(source, bucket)
+    end
+    return NexusEMSSecurityFallback.rateLimit(source, bucket)
+end
+
 local function notify(source, description, notifyType)
     TriggerClientEvent('ox_lib:notify', source, {
         title = 'NEXUS Clinica',
@@ -204,7 +239,7 @@ function NexusEMS.PrepareAction(source, target, actionId)
 
     local existing = pendingByMedic[source]
     if existing and nowMs() > (existing.expiresAt or 0) then
-        exports.nexus_bridge:cancelTimedAction(source, NexusEMSConstants.physicalScope, existing.token)
+        cancelPhysicalAction(source, NexusEMSConstants.physicalScope, existing.token)
         clearPending(source)
         existing = nil
     end
@@ -224,7 +259,7 @@ function NexusEMS.PrepareAction(source, target, actionId)
     if not hasRequired then return false, ('missing_item:%s'):format(selectedItem or 'medical') end
 
     local subject = ('nexus_ems:%s:%s'):format(actionId, target)
-    local token, reason, duration = exports.nexus_bridge:beginTimedAction(
+    local token, reason, duration = beginPhysicalAction(
         source,
         NexusEMSConstants.physicalScope,
         subject,
@@ -303,7 +338,7 @@ function NexusEMS.FinishAction(source, actionToken)
     local action = NexusEMSConfig.actions[actionId]
     clearPending(source)
 
-    local consumed, reason = exports.nexus_bridge:consumeTimedAction(
+    local consumed, reason = consumePhysicalAction(
         source,
         NexusEMSConstants.physicalScope,
         pending.subject,
@@ -338,7 +373,7 @@ end
 function NexusEMS.CancelAction(source, actionToken)
     local pending = pendingByMedic[source]
     if not pending or pending.token ~= actionToken then return false end
-    exports.nexus_bridge:cancelTimedAction(source, NexusEMSConstants.physicalScope, actionToken)
+    cancelPhysicalAction(source, NexusEMSConstants.physicalScope, actionToken)
     clearPending(source)
     return true
 end
