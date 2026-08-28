@@ -5,6 +5,21 @@ NexusOperationsConfig = {
     interactDistance = 4.0,
     abandonCooldownSeconds = 300,
 
+    -- Usado solo por server/security_fallback.lua cuando nexus_bridge no esta
+    -- corriendo. Valores en paridad con nexus_bridge/config/config.lua para que
+    -- el fallback y el modulo compartido se comporten igual.
+    security = {
+        rateLimits = {
+            default = { window = 10000, limit = 8 },
+        },
+        timedActions = {
+            minimumDuration = 500,
+            maximumDuration = 120000,
+            graceMs = 60000,
+            earlyToleranceMs = 250,
+        },
+    },
+
     policeJobs = { police = true, bcso = true, sasp = true },
 
     actionDurations = {

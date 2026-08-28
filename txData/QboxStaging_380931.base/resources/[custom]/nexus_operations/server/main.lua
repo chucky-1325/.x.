@@ -5,18 +5,24 @@ local function physicalSubject(stage, operationId)
 end
 
 local function beginPhysicalAction(source, stage, operationId, duration)
-    if GetResourceState('nexus_bridge') ~= 'started' then return nil, 'security_unavailable' end
-    return exports.nexus_bridge:beginTimedAction(source, 'physical', physicalSubject(stage, operationId), duration)
+    if GetResourceState('nexus_bridge') == 'started' then
+        return exports.nexus_bridge:beginTimedAction(source, 'physical', physicalSubject(stage, operationId), duration)
+    end
+    return NexusOperationsSecurityFallback.beginTimedAction(source, 'physical', physicalSubject(stage, operationId), duration)
 end
 
 local function consumePhysicalAction(source, stage, operationId, token)
-    if GetResourceState('nexus_bridge') ~= 'started' then return false, 'security_unavailable' end
-    return exports.nexus_bridge:consumeTimedAction(source, 'physical', physicalSubject(stage, operationId), token)
+    if GetResourceState('nexus_bridge') == 'started' then
+        return exports.nexus_bridge:consumeTimedAction(source, 'physical', physicalSubject(stage, operationId), token)
+    end
+    return NexusOperationsSecurityFallback.consumeTimedAction(source, 'physical', physicalSubject(stage, operationId), token)
 end
 
 local function cancelPhysicalAction(source, token)
-    if GetResourceState('nexus_bridge') ~= 'started' then return false end
-    return exports.nexus_bridge:cancelTimedAction(source, 'physical', token)
+    if GetResourceState('nexus_bridge') == 'started' then
+        return exports.nexus_bridge:cancelTimedAction(source, 'physical', token)
+    end
+    return NexusOperationsSecurityFallback.cancelTimedAction(source, 'physical', token)
 end
 
 local function notify(source, description, notifyType)
@@ -30,8 +36,10 @@ end
 local function rateLimit(source)
     source = tonumber(source)
     if not source or source <= 0 then return false end
-    if GetResourceState('nexus_bridge') ~= 'started' then return true end
-    return exports.nexus_bridge:rateLimit(source, NexusOperationsConfig.rateLimitBucket or 'default')
+    if GetResourceState('nexus_bridge') == 'started' then
+        return exports.nexus_bridge:rateLimit(source, NexusOperationsConfig.rateLimitBucket or 'default')
+    end
+    return NexusOperationsSecurityFallback.rateLimit(source, NexusOperationsConfig.rateLimitBucket or 'default')
 end
 
 local function getPlayer(source)
