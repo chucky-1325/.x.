@@ -21,6 +21,11 @@ NexusPermissionsConfig = {
     -- desactivada en getStation nunca permite craftear -- cada punto real
     -- de crafteo/reserva sigue rechazando station.enabled==false sin
     -- excepcion, por eso ese bypass cae del lado de "view", no "mutate".
+    --
+    -- nexus_contracts: un permiso de vista (quarantine_view, cubre ambos
+    -- listados) mas DOS permisos de mutacion independientes -- uno por tipo
+    -- de recuperacion (craft_quarantine_recover / lot_incident_recover) --
+    -- para poder delegar cada uno por separado en el futuro sin acoplarlos.
     PermissionCatalog = {
         ['qbx_mdt.admin_access'] = { resource = 'qbx_mdt', label = 'Acceso administrativo a MDT sin ser policia' },
         ['handling_lab.use'] = { resource = 'handling_lab', label = 'Usar los comandos del laboratorio de handling' },
@@ -29,7 +34,9 @@ NexusPermissionsConfig = {
         ['nexus_tablet.bypass_app_restriction'] = { resource = 'nexus_tablet', label = 'Bypass de restriccion de acceso a cualquier app del tablet' },
         ['nexus_crafting.editor_view'] = { resource = 'nexus_crafting', label = 'Listar mesas en el editor y abrir mesas desactivadas para inspeccionarlas (no craftear)' },
         ['nexus_crafting.editor_mutate'] = { resource = 'nexus_crafting', label = 'Crear, guardar, mover, activar/desactivar y eliminar mesas de crafting' },
-        ['nexus_contracts.quarantine_admin'] = { resource = 'nexus_contracts', label = 'Listar y recuperar cuarentenas de craft y lot-incidents' },
+        ['nexus_contracts.quarantine_view'] = { resource = 'nexus_contracts', label = 'Listar cuarentenas de craft y lot-incidents (solo lectura)' },
+        ['nexus_contracts.craft_quarantine_recover'] = { resource = 'nexus_contracts', label = 'Ejecutar la recuperacion de una cuarentena de craft' },
+        ['nexus_contracts.lot_incident_recover'] = { resource = 'nexus_contracts', label = 'Ejecutar la recuperacion de un lot-incident' },
         ['nexus_blackmarket.admin_access'] = { resource = 'nexus_blackmarket', label = 'Acceso administrativo al mercado negro' },
         ['nexus_ems.admin_access'] = { resource = 'nexus_ems', label = 'Acceso administrativo EMS (grado elevado)' },
         ['nexus_labs.admin_access'] = { resource = 'nexus_labs', label = 'Bypass de rango/reputacion para labs y sabotaje' },

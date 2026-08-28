@@ -647,13 +647,33 @@ exports('getDashboardContracts', function(source)
     }
 end)
 
-local function isCraftAdminAllowed(source)
-    return source == 0 or IsPlayerAceAllowed(source, NexusContractsConfig.quarantineAdminAce)
+-- Un permiso de vista compartido por ambos listados, mas DOS permisos de
+-- mutacion independientes -- uno por tipo de recuperacion real -- para
+-- poder delegar cada uno por separado en el futuro sin acoplarlos.
+local function hasQuarantineViewPermission(source)
+    source = tonumber(source)
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_contracts.quarantine_view')
+end
+
+local function hasCraftQuarantineRecoverPermission(source)
+    source = tonumber(source)
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_contracts.craft_quarantine_recover')
+end
+
+local function hasLotIncidentRecoverPermission(source)
+    source = tonumber(source)
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_contracts.lot_incident_recover')
 end
 
 lib.callback.register('nexus_contracts:server:listCraftQuarantines', function(source)
     if not craftingSchemaReady then return nil, 'schema_not_ready' end
-    if not isCraftAdminAllowed(source) then return nil, 'forbidden' end
+    if not hasQuarantineViewPermission(source) then return nil, 'forbidden' end
 
     local rows = NexusContractsListCraftQuarantines()
     local list = {}
@@ -672,7 +692,7 @@ end)
 
 lib.callback.register('nexus_contracts:server:recoverCraftQuarantine', function(source, reservationId, route)
     if not craftingSchemaReady then return false, 'schema_not_ready' end
-    if not isCraftAdminAllowed(source) then return false, 'forbidden' end
+    if not hasCraftQuarantineRecoverPermission(source) then return false, 'forbidden' end
     if type(reservationId) ~= 'string' or reservationId == '' then return false, 'invalid_reservation' end
     if route ~= 'reintegrar' and route ~= 'cerrar' then return false, 'invalid_route' end
 
@@ -694,7 +714,7 @@ local SAFE_LOT_INCIDENT_REASONS = {
 
 lib.callback.register('nexus_contracts:server:listLotIncidents', function(source)
     if not schemaReady then return nil, 'schema_not_ready' end
-    if not isCraftAdminAllowed(source) then return nil, 'forbidden' end
+    if not hasQuarantineViewPermission(source) then return nil, 'forbidden' end
 
     local rows = NexusContractsListLotIncidents()
     local list = {}
@@ -713,7 +733,7 @@ end)
 
 lib.callback.register('nexus_contracts:server:recoverLotIncident', function(source, lotId)
     if not schemaReady then return false, 'schema_not_ready' end
-    if not isCraftAdminAllowed(source) then return false, 'forbidden' end
+    if not hasLotIncidentRecoverPermission(source) then return false, 'forbidden' end
     if type(lotId) ~= 'string' or lotId == '' then return false, 'invalid_lot' end
 
     local result = NexusContractsRecoverLotIncident(lotId, supplyConfig().stockKey)
