@@ -266,6 +266,10 @@ function NexusEMS.PrepareAction(source, target, actionId)
         action.duration
     )
     if not token then return false, reason == 'busy' and 'physical_busy' or reason end
+    -- exports.nexus_bridge:beginTimedAction() puede no propagar su 3er valor
+    -- de retorno a traves del limite de export (confirmado en vivo); mismo
+    -- patron defensivo que nexus_contracts/server/main.lua:636.
+    duration = duration or action.duration
 
     pendingByMedic[source] = {
         token = token,
