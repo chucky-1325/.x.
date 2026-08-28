@@ -59,9 +59,30 @@ local function getCitizenId(source)
     return player and player.PlayerData and player.PlayerData.citizenid or nil
 end
 
-local function isAdmin(source)
+-- canUseLab bypasseaba 4 requisitos distintos con un solo booleano --
+-- separados en progression_bypass (rango + reputacion) y territory_bypass
+-- (zona rival + influencia). sabotage_bypass es un tercero, independiente
+-- (el sabotaje tiene su propio requisito de rango, que NUNCA tiene bypass
+-- admin -- ver el RegisterNetEvent nexus_labs:server:sabotage).
+local function hasProgressionBypass(source)
     source = tonumber(source)
-    return source == 0 or (source and IsPlayerAceAllowed(source, NexusLabsConfig.adminAce or 'admin'))
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_labs.progression_bypass')
+end
+
+local function hasTerritoryBypass(source)
+    source = tonumber(source)
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_labs.territory_bypass')
+end
+
+local function hasSabotageBypass(source)
+    source = tonumber(source)
+    if source == 0 then return true end
+    if GetResourceState('nexus_permissions') ~= 'started' then return false end
+    return exports.nexus_permissions:hasPermission(source, 'nexus_labs.sabotage_bypass')
 end
 
 local function getGang(source)
@@ -133,21 +154,22 @@ local function canUseLab(source, lab, options)
     local gang = getGang(source)
     if not gang or not gang.name or gang.name == 'none' then return false, 'no_gang', gang end
 
-    local admin = isAdmin(source)
-    if not admin and (tonumber(gang.rank) or 0) < (lab.requiredRank or 0) then return false, 'rank', gang end
+    local progressionBypass = hasProgressionBypass(source)
+    if not progressionBypass and (tonumber(gang.rank) or 0) < (lab.requiredRank or 0) then return false, 'rank', gang end
 
     local criminal = (getProgress(source).criminal or {})
-    if not admin and (tonumber(criminal.reputation) or 0) < (lab.minCriminalReputation or 0) then
+    if not progressionBypass and (tonumber(criminal.reputation) or 0) < (lab.minCriminalReputation or 0) then
         return false, 'reputation', gang
     end
 
+    local territoryBypass = hasTerritoryBypass(source)
     local zone = getZoneState(lab.zoneId)
     local production = NexusLabsConfig.production or {}
-    if not admin and production.allowOwnerOnly and zone and zone.status == 'controlled' and zone.owner and zone.owner ~= gang.name then
+    if not territoryBypass and production.allowOwnerOnly and zone and zone.status == 'controlled' and zone.owner and zone.owner ~= gang.name then
         return false, 'rival_zone', gang, zone
     end
 
-    if not admin and zone and zone.owner ~= gang.name then
+    if not territoryBypass and zone and zone.owner ~= gang.name then
         local ownInfluence = 0
         for i = 1, #(zone.influence or {}) do
             local entry = zone.influence[i]
@@ -729,7 +751,7 @@ RegisterNetEvent('nexus_labs:server:sabotage', function(labId)
     if (tonumber(gang.rank) or 0) < (sabotage.requiredRank or 1) then return notify(src, 'Tu rango no permite sabotear.', 'error') end
 
     local criminal = (getProgress(src).criminal or {})
-    if not isAdmin(src) and (tonumber(criminal.reputation) or 0) < (sabotage.minCriminalReputation or 3) then
+    if not hasSabotageBypass(src) and (tonumber(criminal.reputation) or 0) < (sabotage.minCriminalReputation or 3) then
         return notify(src, 'Necesitas mas reputacion criminal para sabotear.', 'error')
     end
 
