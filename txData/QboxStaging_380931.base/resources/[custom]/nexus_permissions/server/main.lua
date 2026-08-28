@@ -3,6 +3,13 @@ local PermissionCache = {}
 local RateLimit = {}
 local RATE_LIMIT_MS = 3000
 
+-- Fase 0: false hasta que onResourceStart termine de poblar la cache para
+-- los jugadores ya conectados. hasPermission/hasAnyPermission fallan cerrado
+-- mientras tanto -- nunca hay una ventana donde "no listo" se lea como true.
+local ResourceReady = false
+
+local PermissionCatalog = NexusPermissionsConfig and NexusPermissionsConfig.PermissionCatalog or {}
+
 local ROLE_PATTERN = '^[a-z_]+$'
 local MAX_CITIZENID_LEN = 64
 local MAX_ROLE_LEN = 32
@@ -199,7 +206,8 @@ AddEventHandler('onResourceStart', function(resource)
         end
     end
 
-    notifyConsole(('catalogo de roles y auditoria cargados (Fase 1, sin autorizacion de gameplay) | %s jugador(es) ya conectado(s) indexado(s)'):format(#players))
+    ResourceReady = true
+    notifyConsole(('catalogo de roles y auditoria cargados (Fase 0: hasPermission/hasAnyPermission activos) | %s jugador(es) ya conectado(s) indexado(s)'):format(#players))
 end)
 
 -- ----- Validacion contra BD -----
@@ -389,3 +397,52 @@ RegisterCommand('revokerole', function(source, args)
     reloadIfNeeded(citizenid)
     notifyConsole(('rol %s retirado de %s'):format(roleName, citizenid))
 end, false)
+
+-- ----- API publica (Fase 0) -----
+-- Solo lectura, apoyada en PermissionCache. Sin fallback a IsPlayerAceAllowed
+-- en ningun punto -- si esto devuelve false, el llamador decide que hacer
+-- (denegar, o su propio chequeo ACE existente durante la transicion).
+
+-- Unico punto que decide true/false para un permiso individual. Fail-closed
+-- en cada capa: recurso no listo, permiso no catalogado, source invalido,
+-- source sin citizenid trackeado, o citizenid sin cache -- todo devuelve
+-- false, nunca un error que tumbe al llamador.
+local function checkSinglePermission(source, permission)
+    if not ResourceReady then return false end
+
+    if type(permission) ~= 'string' or not PermissionCatalog[permission] then
+        notifyConsole(('permiso desconocido consultado: %s'):format(tostring(permission)))
+        return false
+    end
+
+    source = tonumber(source)
+    if source == 0 then return true end
+    if type(source) ~= 'number' or source < 0 then return false end
+
+    local citizenid = SourceCitizenid[source]
+    if not citizenid then return false end
+
+    local cache = PermissionCache[citizenid]
+    if not cache then return false end
+
+    return cache.permissions[permission] == true
+end
+
+local function hasPermission(source, permission)
+    return checkSinglePermission(source, permission)
+end
+
+-- true si el source tiene AL MENOS UNO de los permisos de la lista. Cada
+-- entrada pasa por el mismo chequeo fail-closed que hasPermission -- una
+-- entrada con un permiso no catalogado simplemente no puede matchear, no
+-- aborta la evaluacion de las demas.
+local function hasAnyPermission(source, permissions)
+    if type(permissions) ~= 'table' then return false end
+    for i = 1, #permissions do
+        if checkSinglePermission(source, permissions[i]) then return true end
+    end
+    return false
+end
+
+exports('hasPermission', hasPermission)
+exports('hasAnyPermission', hasAnyPermission)

@@ -1,0 +1,19 @@
+DELETE FROM nexus_permission_role_grants WHERE role_name = 'admin' AND permission IN (
+    'qbx_mdt.admin_access',
+    'handling_lab.use',
+    'nexus_dispatch.admin_access',
+    'nexus_tablet.admin_access',
+    'nexus_crafting.editor_manage',
+    'nexus_contracts.quarantine_admin',
+    'nexus_blackmarket.admin_access',
+    'nexus_ems.admin_access',
+    'nexus_labs.admin_access',
+    'nexus_territories.editor_manage',
+    'nexus_territories.graffiti_admin',
+    'nexus_territories.influence_grant',
+    'nexus_territories.airdrop_admin',
+    'nexus_gangs.admin_manage',
+    'nexus_menu.admin_access',
+    'nexus_menu.give_kit',
+    'nexus_menu.grant_progression'
+);
