@@ -25,5 +25,4 @@ dependencies {
     'ox_lib',
     'qbx_core',
     'ox_target',
-    'nexus_bridge',
 }
