@@ -9,6 +9,7 @@ Thumbs.db
 # --- Root-level non-source items: out of scope for "solo codigo fuente" ---
 /*.md
 !/README.md
+!/LICENSE.md
 /*.bat
 /.codex/
 /docs/
