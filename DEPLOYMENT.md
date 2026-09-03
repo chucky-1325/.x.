@@ -32,14 +32,31 @@ Antes de apuntar `mysql_connection_string` a cualquier instancia:
 
 ## 2. Importación SQL
 
-Ningún recurso `nexus_*` requiere importar un archivo `.sql` manualmente
-— cada uno crea sus propias tablas con `CREATE TABLE IF NOT EXISTS` en su
-primer arranque (`server/database.lua` de cada recurso). Lo único que
-necesitas hacer:
+**Corrección tras documentar el catálogo completo (14 recursos secundarios):**
+la afirmación original de este documento — "ningún recurso requiere SQL
+manual" — era cierta solo para los 3 módulos insignia auditados en la Fase B
+(`nexus_ems`, `nexus_crafting`, `nexus_territories`) y para la mayoría del
+resto. **3 de los 18 recursos son la excepción real** y sí necesitan
+importación manual antes de su primer arranque:
+
+| Recurso | Requiere importar | Nota |
+|---|---|---|
+| `nexus_permissions` | `sql/001_init.sql` a `008_gangs_permission_split.sql` (8 migraciones, en orden) | Sin esto, el catálogo de permisos/roles no existe — `grantrole` fallará. |
+| `nexus_progression` | `sql/migrations/001_initial_schema.sql` | Único recurso del catálogo sin `CREATE TABLE IF NOT EXISTS` automático en `server/database.lua`. |
+| `nexus_contracts` | `sql/migrations/002` a `006` (`_mechanic_supply.sql`, `_mechanic_crafting.sql`, `_quarantine_recovery_procedure.sql`, `_civil_lot_recovery_procedure.sql`, `_craft_quarantine_reintegrar_guard.sql`) | Sin estas, el subsistema de suministro/cuarentena mecánica se autodesactiva con un error de consola controlado — el resto del recurso funciona igual. |
+
+El resto de recursos `nexus_*` (los otros 15, incluyendo los 3 módulos
+insignia) sí crean sus propias tablas con `CREATE TABLE IF NOT EXISTS` en su
+primer arranque (`server/database.lua` de cada recurso) — para esos, ningún
+paso SQL manual es necesario. Ver la sección "Instalación" del `README.md`
+de cada recurso para confirmar cuál caso aplica.
+
+Pasos generales:
 
 1. Tener importado el SQL base de tu framework QBox/OX (`qbx_core.sql` y el de tus recursos de inventario/target/etc.) — **esto es requisito previo de tu base, no de NEXUS**.
-2. Registrar en `ox_inventory/data/items.lua` los items que usan las recetas/acciones de NEXUS (bandage, painkillers, firstaid, lockpick, nexus_spraycan, nexus_graffiti_remover, nexus_contract_package, etc. — ver la sección "Instalación" de cada `README.md` de recurso para la lista exacta que usa).
-3. Arrancar el servidor una vez con todos los `nexus_*` en `ensure`: las tablas se crean solas. No hace falta ningún paso SQL manual adicional.
+2. Importar las 3 excepciones de la tabla de arriba, en el orden numérico de sus archivos.
+3. Registrar en `ox_inventory/data/items.lua` los items que usan las recetas/acciones de NEXUS (bandage, painkillers, firstaid, lockpick, nexus_spraycan, nexus_graffiti_remover, nexus_contract_package, etc. — ver la sección "Instalación" de cada `README.md` de recurso para la lista exacta que usa).
+4. Arrancar el servidor una vez con todos los `nexus_*` en `ensure`: el resto de tablas se crean solas.
 
 `nexus_workorders` es la única excepción: solo trae migraciones SQL
 (`sql/001` a `007`) sin código de recurso todavía — **no lo actives**, no
