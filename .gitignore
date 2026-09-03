@@ -10,6 +10,7 @@ Thumbs.db
 /*.md
 !/README.md
 !/LICENSE.md
+!/DEPLOYMENT.md
 /*.bat
 /.codex/
 /docs/

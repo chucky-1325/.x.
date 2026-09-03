@@ -1,0 +1,181 @@
+############################################
+##              NETWORK                  ##
+############################################
+endpoint_add_tcp "0.0.0.0:30120"
+endpoint_add_udp "0.0.0.0:30120"
+sv_maxclients 48
+
+# Steam Web API Key - obten la tuya en https://steamcommunity.com/dev/apikey
+set steam_webApiKey "YOUR_STEAM_KEY"
+sets tags "default, deployer, qbox"
+
+############################################
+##              SERVER INFO              ##
+############################################
+# Licencia del servidor - obtenla en https://keymaster.fivem.net - NO COMPARTIR
+sv_licenseKey "YOUR_CFX_KEY"
+
+sv_hostname "Tu Servidor QBox + NEXUS"
+sets sv_projectName "Tu Servidor"
+sets sv_projectDesc "Descripcion corta del servidor"
+sets locale "es-ES"
+
+set sv_enforceGameBuild 3258
+
+############################################
+##              DATABASE                 ##
+############################################
+# oxmysql espera formato URI mysql://, no el formato server=;port=;... de
+# ADO.NET/MSSQL. Apunta esto a tu propia instancia MariaDB/MySQL sana -- NUNCA
+# a una instancia con historial de corrupcion sin verificar primero con
+# `mysqlcheck`/`aria_chk` (ver DEPLOYMENT.md, seccion "Base de datos").
+# Puerto 3310 aqui es solo el que se validó durante el desarrollo de este
+# pack -- usa el puerto real de tu propio servidor MySQL/MariaDB.
+set mysql_connection_string "mysql://YOUR_DB_USER:YOUR_DB_PASSWORD@127.0.0.1:3310/qbox_staging?charset=utf8mb4"
+
+############################################
+##         CFX SECURITY CONVARS          ##
+############################################
+set sv_authMaxVariance 5
+set sv_authMinTrust 1
+
+set sv_requestParanoia 0
+
+set sv_filterRequestControl 0
+set sv_filterRequestControlSettleTimer 30000
+
+set sv_pureLevel 0
+
+set sv_enableNetworkedSounds true
+set sv_enablePhoneExplosions false
+set sv_enableNetworkedScriptEntityStates true
+
+set sv_entityLockdown "inactive"
+
+setr sv_enableNetEventReassembly true
+setr sv_netEventReassemblyMaxPendingEvents 100
+setr sv_netEventReassemblyUnlimitedPendingEvents false
+
+setr sv_showBusySpinnerOnLoadingScreen false
+
+############################################
+##              CHAT                     ##
+############################################
+set resources_useSystemChat true
+set qbx_chat:joinMessage "^2%s entro al servidor"
+set qbx_chat:quitMessage "^1%s salio del servidor (%s)"
+
+############################################
+##              VOICE                    ##
+############################################
+# exec voice.cfg
+# Descomenta si usas pma-voice; crea tu propio voice.cfg (no incluido en este
+# pack, es infraestructura de tu propio servidor).
+
+############################################
+##              QBOX CORE                ##
+############################################
+setr qb_locale "es"
+
+set qbx:enableBridge "true"
+set qbx:enableQueue "true"
+set qbx:bucketLockdownMode "inactive"
+set qbx:max_jobs_per_player 1
+set qbx:max_gangs_per_player 1
+set qbx:setjob_replaces "true"
+set qbx:setgang_replaces "true"
+set qbx:cleanPlayerGroups "true"
+set qbx:allowMethodOverrides "true"
+setr qbx:enableVehiclePersistence "false"
+setr qbx:vehiclePersistenceType "semi"
+set qbx:acknowledge "true"
+setr qbx:enableGroupManagement "false"
+
+############################################
+##              OX                       ##
+############################################
+# exec ox.cfg
+# Tu propio ox.cfg (locale, target, inventory) -- no incluido en este pack.
+
+############################################
+##      CORE (QBox/OX) - AJUSTA A TU BASE  ##
+############################################
+# Este pack asume una base QBox estandar ya funcional. La lista de abajo es
+# el minimo que los recursos nexus_* necesitan encontrar iniciado; no
+# sustituye tu propia base QBox/OX completa (garajes, vehiculos, banco,
+# apariencia, etc. son responsabilidad de tu propia instalacion QBox).
+ensure mapmanager
+ensure chat
+ensure spawnmanager
+ensure sessionmanager
+ensure hardcap
+ensure baseevents
+
+ensure ox_lib
+ensure oxmysql
+ensure qbx_core
+ensure ox_target
+ensure ox_inventory
+
+############################################
+##          NEXUS - STACK COMPLETO         ##
+############################################
+# Orden validado en staging. nexus_bridge y nexus_permissions van primero:
+# son infraestructura blanda (rate limit / RBAC) que el resto de recursos
+# nexus_* detecta via GetResourceState -- si arrancan despues, los demas
+# recursos igual funcionan, pero degradados (rate limit fail-closed sin
+# nexus_bridge; TODO panel de administracion bloqueado sin nexus_permissions,
+# ver DEPLOYMENT.md).
+ensure nexus_bridge
+ensure nexus_permissions
+ensure nexus_ui
+ensure nexus_scene_core
+ensure nexus_progression
+ensure nexus_gangs
+ensure nexus_territories
+ensure nexus_dutyboard
+ensure nexus_ems
+ensure nexus_crafting
+ensure nexus_contracts
+ensure nexus_operations
+ensure nexus_labs
+ensure nexus_laundering
+ensure nexus_blackmarket
+ensure nexus_dispatch
+ensure nexus_tablet
+ensure nexus_menu
+
+# nexus_workorders NO se incluye: es un esqueleto SQL sin implementacion de
+# codigo todavia (ver auditoria comercial). No lo actives en produccion.
+
+############################################
+##            PERMISSIONS                ##
+############################################
+# exec permissions.cfg
+# Tu propio permissions.cfg (ACLs de txAdmin/admins) -- no incluido.
+
+add_ace group.admin command allow
+add_ace resource.qbx_core command allow
+
+add_ace resource.ox_lib command.add_ace allow
+add_ace resource.ox_lib command.remove_ace allow
+add_ace resource.ox_lib command.add_principal allow
+add_ace resource.ox_lib command.remove_principal allow
+
+add_ace group.admin admin allow
+add_ace group.admin nexus.permissions.manage allow
+add_ace group.mod mod allow
+add_ace group.support support allow
+
+add_principal group.admin group.mod
+add_principal group.mod group.support
+
+# La migracion a nexus_permissions (RBAC) cerro todos los paneles de
+# administracion nexus_* fuera de ACE -- el grupo `admin` de arriba NO
+# concede automaticamente acceso a esos paneles. Debes asignar roles reales
+# via nexus_permissions (ver DEPLOYMENT.md, seccion "Permisos").
+
+############################################
+##              EXTRA                    ##
+############################################
+# exec misc.cfg
