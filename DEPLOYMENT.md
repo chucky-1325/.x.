@@ -85,6 +85,18 @@ cualquier recurso `nexus_*` con jugadores conectados — no solo a
 `nexus_ems`, que es donde el disparador se reprodujo de forma
 determinística.
 
+### Nota operativa — cambios de `cfgPath` en txAdmin
+
+Cambiar el parámetro `cfgPath` en `txData/default/config.json` (o el
+`config.json` de tu propio perfil) **requiere reiniciar por completo el
+proceso ejecutable `FXServer.exe`**. El botón de reinicio básico de la
+interfaz web de txAdmin ("Restart Server") solo reinicia la capa interna del
+juego dentro del proceso ya corriendo — **no relee las rutas de
+configuración del JSON**. Verificado en vivo durante el smoke test de este
+pack: tras editar `cfgPath`, el "Restart Server" siguió arrancando el
+perfil anterior; solo tomó efecto tras matar el proceso `FXServer.exe`
+completo y relanzarlo desde cero.
+
 ### Orden de arranque
 
 Respeta el orden de `ensure` de `server.cfg.example`. `nexus_bridge` y
