@@ -172,10 +172,6 @@ end, false)
 
 RegisterCommand(NexusBlackmarketConfig.nearestCommand, openNearestMarket, false)
 
-RegisterCommand('bmtest', function()
-    openMarket('rancho_contact')
-end, false)
-
 RegisterNetEvent('nexus_blackmarket:client:refresh', function(locationId)
     if activeMarket == locationId then
         openMarket(locationId)

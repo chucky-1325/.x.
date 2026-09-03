@@ -5,7 +5,7 @@ lua54 'yes'
 name 'nexus_contracts'
 author 'Nexus Creative Systems'
 description 'Contratos civiles trazables para el Vertical Slice NEXUS.'
-version '0.2.0-staging'
+version '1.0.0'
 
 shared_scripts {
     '@ox_lib/init.lua',

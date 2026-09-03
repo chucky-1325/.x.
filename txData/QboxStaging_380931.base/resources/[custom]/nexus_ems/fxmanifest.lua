@@ -47,6 +47,5 @@ dependencies {
     'oxmysql',
     'ox_inventory',
     'ox_target',
-    'nexus_scene_core',
 }
 

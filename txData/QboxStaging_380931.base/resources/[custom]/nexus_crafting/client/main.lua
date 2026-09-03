@@ -545,21 +545,6 @@ local function openNearestStation()
     openStation(nearest.id)
 end
 
-local function debugCrafting()
-    if #cachedStations == 0 then
-        refreshWorkbenches()
-    end
-
-    local closest, distance = getClosestStation()
-    if closest then
-        notify(('Mesas cargadas: %s | cercana: %s %.1fm'):format(#cachedStations, closest.id, distance), 'inform')
-        print(('[nexus_crafting] debug count=%s closest=%s distance=%.2f'):format(#cachedStations, closest.id, distance))
-    else
-        notify('Mesas cargadas: 0. Revisa txAdmin/server callback.', 'error')
-        print('[nexus_crafting] debug count=0')
-    end
-end
-
 local function parseCsv(value)
     local result = {}
     for token in tostring(value or ''):gmatch('[^,]+') do
@@ -930,30 +915,9 @@ RegisterCommand('craftreload', function()
     notify(('Bancos recargados: %s'):format(#cachedStations), 'inform')
 end, false)
 
-RegisterCommand('craftdebug', debugCrafting, false)
-
 RegisterCommand('craftclose', function()
     closeUi()
     notify('Interfaz de crafting cerrada.', 'inform')
-end, false)
-
-RegisterCommand('craftnuitest', function()
-    isOpen = true
-    isOpening = true
-    nuiOpenAck = false
-    SetNuiFocus(true, true)
-    SetNuiFocusKeepInput(false)
-    nui('diagnostic', {
-        label = 'NUI TEST',
-        message = 'Si ves este panel, html/index.html esta cargando correctamente.',
-    })
-
-    SetTimeout(8000, function()
-        if nuiOpenAck then return end
-        print('[nexus_crafting] NUI diagnostic timeout')
-        closeUi()
-        notify('La NUI de crafting no carga. Revisar ui_page/fxmanifest/cache.', 'error')
-    end)
 end, false)
 
 RegisterCommand(NexusCraftingConfig.editorCommand, openEditor, false)

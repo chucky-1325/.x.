@@ -5,7 +5,7 @@ lua54 'yes'
 name 'nexus_crafting'
 author 'Nexus Creative Systems'
 description 'Banco mecanico NEXUS para el Vertical Slice de suministros.'
-version '0.2.0-staging'
+version '1.0.0'
 
 ui_page './html/index.html'
 
