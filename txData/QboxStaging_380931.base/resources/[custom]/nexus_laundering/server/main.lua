@@ -9,7 +9,10 @@ end
 local function rateLimit(source)
     source = tonumber(source)
     if not source or source <= 0 then return false end
-    if GetResourceState('nexus_bridge') ~= 'started' then return true end
+    -- Fail-closed: nexus_bridge down must not disable rate limiting entirely.
+    -- Was "return true" (unlimited) -- turned any nexus_bridge outage/restart
+    -- into an unlimited-abuse window.
+    if GetResourceState('nexus_bridge') ~= 'started' then return false end
     return exports.nexus_bridge:rateLimit(source, NexusLaunderingConfig.rateLimitBucket or 'laundering')
 end
 
@@ -163,6 +166,13 @@ exports('getDashboardLaundering', function(source)
     }
 end)
 
+-- In-flight lock per citizenid:locationId. NexusLaunderingGetCooldown/SetCooldown are
+-- async DB calls (coroutine yields); the cooldown read happens near the top of this
+-- handler and the write only at the very end, after several more yields. Without this
+-- lock, concurrent invocations of the same event can all read the pre-update cooldown
+-- and all pass, letting a player launder far above the intended per-location rate.
+local activeLaunders = {}
+
 RegisterNetEvent('nexus_laundering:server:launder', function(locationId, amount)
     local src = source
     if not rateLimit(src) then return end
@@ -181,32 +191,46 @@ RegisterNetEvent('nexus_laundering:server:launder', function(locationId, amount)
     local citizenid = getCitizenId(src)
     if not citizenid then return notify(src, 'CitizenID no disponible.', 'error') end
 
+    local lockKey = citizenid .. ':' .. locationId
+    if activeLaunders[lockKey] then
+        return notify(src, 'Ya hay un lavado en curso en este punto.', 'error')
+    end
+    activeLaunders[lockKey] = true
+    local function releaseLock() activeLaunders[lockKey] = nil end
+
     local cooldown = NexusLaunderingGetCooldown(citizenid, locationId)
-    if cooldown > 0 then return notify(src, ('Lavado en cooldown: %s min.'):format(math.ceil(cooldown / 60)), 'error') end
+    if cooldown > 0 then
+        releaseLock()
+        return notify(src, ('Lavado en cooldown: %s min.'):format(math.ceil(cooldown / 60)), 'error')
+    end
 
     local criminal = (getProgress(src).criminal or {})
     if (tonumber(criminal.reputation) or 0) < (location.minCriminalReputation or 0) then
+        releaseLock()
         return notify(src, 'Necesitas mas reputacion criminal para este contacto.', 'error')
     end
 
     local gang = getGang(src)
     if location.requiredGang and (not gang.name or gang.name == 'none') then
+        releaseLock()
         return notify(src, 'Este punto requiere pertenecer a una banda.', 'error')
     end
 
     local item = NexusLaunderingConfig.dirtyItem or 'black_money'
     if (exports.ox_inventory:GetItemCount(src, item) or 0) < dirtyAmount then
+        releaseLock()
         return notify(src, ('Necesitas $%s en dinero sucio.'):format(dirtyAmount), 'error')
     end
 
     if not exports.ox_inventory:RemoveItem(src, item, dirtyAmount) then
+        releaseLock()
         return notify(src, 'No se pudo retirar dinero sucio.', 'error')
     end
 
     local commission = math.floor(dirtyAmount * ((location.commissionPercent or 25) / 100))
     local cleanAmount = math.max(0, dirtyAmount - commission)
     local player = getPlayer(src)
-    if not player then return notify(src, 'Jugador no disponible.', 'error') end
+    if not player then releaseLock() return notify(src, 'Jugador no disponible.', 'error') end
     player.Functions.AddMoney('cash', cleanAmount, 'nexus-laundering')
 
     local risk = effectiveRisk(src, location)
@@ -216,6 +240,7 @@ RegisterNetEvent('nexus_laundering:server:launder', function(locationId, amount)
         message = ('Posible lavado en %s'):format(location.label or locationId),
     })
     NexusLaunderingSetCooldown(citizenid, locationId, limits.cooldownSeconds or 900)
+    releaseLock()
     NexusLaunderingLog({
         citizenid = citizenid,
         playerName = GetPlayerName(src),

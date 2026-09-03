@@ -967,8 +967,13 @@ lib.callback.register('nexus_crafting:server:finishCraft', function(source, stat
         return false, verticalSliceRuntimeReason or 'schema_not_ready'
     end
 
-    if GetResourceState('nexus_bridge') == 'started'
-        and not exports.nexus_bridge:rateLimit(source, NexusCraftingConfig.rateLimitBucket) then
+    -- Fail-closed: the previous "started and not rateLimit(...)" form short-circuited to
+    -- false (skipping the guard entirely) whenever nexus_bridge wasn't started, so a
+    -- nexus_bridge outage removed rate limiting from item-granting craft completion.
+    if GetResourceState('nexus_bridge') ~= 'started' then
+        return false, 'rate_limited'
+    end
+    if not exports.nexus_bridge:rateLimit(source, NexusCraftingConfig.rateLimitBucket) then
         return false, 'rate_limited'
     end
 
@@ -1003,7 +1008,9 @@ end)
 RegisterNetEvent('nexus_crafting:server:saveWorkbench', function(data)
     local src = source
     if not hasEditorMutatePermission(src) then return notify(src, 'No tienes permiso para editar mesas.', 'error') end
-    if GetResourceState('nexus_bridge') == 'started' and not exports.nexus_bridge:rateLimit(src, 'admin') then return end
+    -- Fail-closed: see finishCraft above for why "started and not rateLimit(...)" is unsafe.
+    if GetResourceState('nexus_bridge') ~= 'started' then return end
+    if not exports.nexus_bridge:rateLimit(src, 'admin') then return end
 
     local bench, reason = sanitizeWorkbenchPayload(src, data)
     if not bench then return notify(src, ('Mesa invalida: %s'):format(reason), 'error') end

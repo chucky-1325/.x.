@@ -6,6 +6,16 @@ NexusBridgeConfig = {
         tablet = { window = 5000, limit = 6 },
         crafting = { window = 7000, limit = 2 },
         admin = { window = 3000, limit = 10 },
+        -- Dedicated, tight bucket for real-money actions. Previously nexus_laundering
+        -- referenced a 'laundering' bucket that didn't exist here, so it silently fell
+        -- back to the generous 'default' bucket (8 calls/10s) instead of being tightly
+        -- limited. Defense-in-depth alongside the in-memory single-flight lock added in
+        -- nexus_laundering/server/main.lua.
+        laundering = { window = 30000, limit = 1 },
+        -- nexus_labs/config/config.lua sets rateLimitBucket = 'labs', which had no entry
+        -- here either -- same silent-fallback-to-default drift as 'laundering' above,
+        -- for drug-production actions.
+        labs = { window = 10000, limit = 3 },
     },
 
     timedActions = {

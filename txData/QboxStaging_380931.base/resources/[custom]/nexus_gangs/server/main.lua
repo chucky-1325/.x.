@@ -54,7 +54,10 @@ local function rateLimit(source)
     source = tonumber(source)
     if not source or source <= 0 then return false end
     if source == 0 then return true end
-    if GetResourceState('nexus_bridge') ~= 'started' then return true end
+    -- Fail-closed: nexus_bridge down must not disable rate limiting entirely.
+    -- Was "return true" (unlimited) -- turned any nexus_bridge outage/restart
+    -- into an unlimited-abuse window.
+    if GetResourceState('nexus_bridge') ~= 'started' then return false end
     return exports.nexus_bridge:rateLimit(source, NexusGangsConfig.rateLimitBucket or 'default')
 end
 

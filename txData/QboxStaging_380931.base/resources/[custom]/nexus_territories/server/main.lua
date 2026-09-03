@@ -12,7 +12,10 @@ local function notify(source, description, notifyType)
 end
 
 local function rateLimit(source)
-    if GetResourceState('nexus_bridge') ~= 'started' then return true end
+    -- Fail-closed: nexus_bridge down must not disable rate limiting entirely.
+    -- Was "return true" (unlimited) -- turned any nexus_bridge outage/restart
+    -- into an unlimited-abuse window.
+    if GetResourceState('nexus_bridge') ~= 'started' then return false end
     return exports.nexus_bridge:rateLimit(source, NexusTerritoriesConfig.rateLimitBucket or 'default')
 end
 
@@ -348,6 +351,15 @@ local function addInfluence(source, zoneId, amount, reason)
     if not getZones()[zoneId] then return false, 'invalid_zone' end
 
     local gangName = getGangName(source)
+    -- Reject rather than silently crediting influence to the independent/no-gang key.
+    -- Unlike the in-resource player actions (sprayGraffiti, claimAirdrop, admin influence
+    -- commands), this export was previously ungated: when nexus_gangs AND qbx_core are
+    -- both down, getGangName() falls back to independentKey, and every external caller
+    -- (nexus_blackmarket, nexus_crafting, nexus_labs, nexus_operations) would have its
+    -- influence silently pooled into a key that getZoneOwner() explicitly excludes from
+    -- ownership -- spending real cost for zero effect, with no error surfaced anywhere.
+    local independentKey = NexusTerritoriesConfig.control.independentKey or 'independent'
+    if gangName == independentKey then return false, 'no_real_gang' end
     local value = tonumber(amount) or 0
     if value == 0 then return false, 'invalid_amount' end
 
@@ -746,42 +758,61 @@ RegisterNetEvent('nexus_territories:server:claimAirdrop', function(airdropId)
     if not config.enabled then return end
     if not rateLimit(src) then return end
 
-    local hasGang, gangName = hasRealGang(src)
-    if not hasGang then return notify(src, 'Necesitas pertenecer a una banda para capturar el airdrop.', 'error') end
-
+    -- Atomic claim lock. Must happen synchronously, before any yielding call (hasRealGang
+    -- below does a DB round-trip), otherwise concurrent invocations of this event can all
+    -- read activeAirdrop.claimed == false before any of them writes true, each paying out
+    -- the full reward table. Lock first, verify afterwards, release on any failed path so
+    -- a legitimate claim can still happen if this attempt doesn't complete.
     if not activeAirdrop or activeAirdrop.claimed or activeAirdrop.id ~= tostring(airdropId or '') then
         return notify(src, 'Este airdrop ya no esta disponible.', 'error')
     end
+    local claimedAirdrop = activeAirdrop
+    claimedAirdrop.claimed = true
+    local function releaseClaim()
+        if activeAirdrop == claimedAirdrop and activeAirdrop.claimed then
+            activeAirdrop.claimed = false
+        end
+    end
 
-    if os.time() > activeAirdrop.expiresAt then
+    local hasGang, gangName = hasRealGang(src)
+    if not hasGang then
+        releaseClaim()
+        return notify(src, 'Necesitas pertenecer a una banda para capturar el airdrop.', 'error')
+    end
+
+    if os.time() > claimedAirdrop.expiresAt then
         activeAirdrop = nil
         TriggerClientEvent('nexus_territories:client:setAirdrop', -1, nil)
         return notify(src, 'El airdrop expiro.', 'error')
     end
 
     local pedCoords = getPedCoords(src)
-    if not pedCoords then return end
+    if not pedCoords then releaseClaim() return end
 
-    local dropCoords = vector3(activeAirdrop.coords.x, activeAirdrop.coords.y, activeAirdrop.coords.z)
+    local dropCoords = vector3(claimedAirdrop.coords.x, claimedAirdrop.coords.y, claimedAirdrop.coords.z)
     if #(pedCoords - dropCoords) > (tonumber(config.captureDistance) or 3.0) + 1.0 then
+        releaseClaim()
         return notify(src, 'Estas demasiado lejos del airdrop.', 'error')
     end
 
-    if GetResourceState('ox_inventory') ~= 'started' then return notify(src, 'Inventario no disponible.', 'error') end
+    if GetResourceState('ox_inventory') ~= 'started' then
+        releaseClaim()
+        return notify(src, 'Inventario no disponible.', 'error')
+    end
     for _, reward in ipairs(config.rewards or {}) do
         if not exports.ox_inventory:CanCarryItem(src, reward.item, reward.count or 1) then
+            releaseClaim()
             return notify(src, ('No tienes espacio para %s.'):format(reward.item), 'error')
         end
     end
 
-    activeAirdrop.claimed = true
     for _, reward in ipairs(config.rewards or {}) do
         exports.ox_inventory:AddItem(src, reward.item, reward.count or 1)
     end
 
-    addInfluenceForGang(src, activeAirdrop.zoneId, gangName, tonumber(config.influenceReward) or 12, 'airdrop_claimed')
+    addInfluenceForGang(src, claimedAirdrop.zoneId, gangName, tonumber(config.influenceReward) or 12, 'airdrop_claimed')
 
-    local claimedZone = activeAirdrop.zoneLabel
+    local claimedZone = claimedAirdrop.zoneLabel
     activeAirdrop = nil
     TriggerClientEvent('nexus_territories:client:setAirdrop', -1, nil)
 
